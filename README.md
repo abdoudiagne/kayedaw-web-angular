@@ -23,7 +23,7 @@ npm run build    # build de production
 Le backend doit tourner en parallèle :
 
 ```bash
-cd ../kayedaw-api-kotlin && mvn spring-boot:run
+cd ../kayedaw-api-koltin && mvn spring-boot:run
 ```
 
 ### Comptes de démonstration
@@ -47,7 +47,7 @@ Le fichier `proxy.conf.json` redirige `/api` vers `http://localhost:8080` — ce
 Les séances passées sont enrichies avec les **observations officielles**
 Météo-France (API DPClim) si le secret est fourni. Deux façons :
 
-1. **En local** — `kayedaw-api-kotlin/config/application.yml` (déjà en place,
+1. **En local** — `kayedaw-api-koltin/config/application.yml` (déjà en place,
    ignoré par git, non empaqueté dans le JAR). Spring Boot le lit
    automatiquement : `mvn spring-boot:run` suffit, aucun profil à activer.
 2. **En production** — variable d'environnement, qui a la priorité :

@@ -14,7 +14,7 @@ npx ng test --include='**/allure.pipe.spec.ts' --watch=false   # one spec file
 
 `npm run lint` is declared in package.json but **no linter is installed** (`@angular-eslint` is absent) — the script fails. Don't rely on it; use `npx tsc --noEmit`-style checking via `npm run build` instead.
 
-The app calls `/api/**`, which `proxy.conf.json` forwards to `http://localhost:8080`. The Kotlin/Spring backend lives at **`../kayedaw-api-kotlin`** and must be up or every screen shows "Serveur injoignable" — start it with `mvn spring-boot:run` (74 tests across 12 files). Both repos are published under `github.com/abdoudiagne` (`kayedaw-api-kotlin`, `kayedaw-web-angular`), branch `main`.
+The app calls `/api/**`, which `proxy.conf.json` forwards to `http://localhost:8080`. The Kotlin/Spring backend lives at **`../kayedaw-api-koltin`** and must be up or every screen shows "Serveur injoignable" — start it with `mvn spring-boot:run` (74 tests across 12 files). Both repos are published under `github.com/abdoudiagne` (`kayedaw-api-koltin`, `kayedaw-web-angular`), branch `main`.
 
 Demo accounts, seeded on every backend start by `config/DatasInitiales.kt` (H2 is in-memory, so they are recreated each run):
 
@@ -86,7 +86,7 @@ Gotchas already paid for, do not regress them:
 - Not every station has data every day. The client tries the 3 nearest stations before falling back (Toulouse's nearest station 404s).
 - DPClim has its **own** 2.5 s budget inside the 5 s global one. Without it a slow DPClim chain consumed the whole budget and the séance came back with *no* weather and *no* city, discarding Open-Meteo results already in hand.
 
-**Auth**: OAuth2 `client_credentials`. `JetonMeteoFranceService` caches the 1 h token, refreshes 5 min early, and serialises refreshes behind a `Mutex` with double-checked locking. The secret lives in **`kayedaw-api-kotlin/config/application.yml`** — Spring Boot reads `./config/` automatically with priority over the classpath, it is gitignored (via `/config/`, with a leading slash: without it the rule also swallowed the backend's `src/main/kotlin/com/kayedaw/config/` source package), and (unlike `src/main/resources`) it is **not packaged into the JAR**. `METEOFRANCE_APPLICATION_ID` still overrides it for production. Absent both, the integration disables itself and Open-Meteo takes over — the app runs fine either way, which is exactly how the fallback gets tested.
+**Auth**: OAuth2 `client_credentials`. `JetonMeteoFranceService` caches the 1 h token, refreshes 5 min early, and serialises refreshes behind a `Mutex` with double-checked locking. The secret lives in **`kayedaw-api-koltin/config/application.yml`** — Spring Boot reads `./config/` automatically with priority over the classpath, it is gitignored (via `/config/`, with a leading slash: without it the rule also swallowed the backend's `src/main/kotlin/com/kayedaw/config/` source package), and (unlike `src/main/resources`) it is **not packaged into the JAR**. `METEOFRANCE_APPLICATION_ID` still overrides it for production. Absent both, the integration disables itself and Open-Meteo takes over — the app runs fine either way, which is exactly how the fallback gets tested.
 
 `Modèle_AROME_swagger.json` sits in the backend repo but is **unused**: AROME only exposes WMS/WCS raster (GRIB2/GeoTIFF), keeps ~5 days of runs, and is forecast-only — it cannot answer "what was the weather during my session".
 
