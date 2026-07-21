@@ -10,21 +10,26 @@ annotée sur place.
 ```bash
 npm install
 npm start        # http://localhost:4200 (proxy vers l'API sur :8080)
-npm test         # tests unitaires Karma / Jasmine
-npm run test:e2e # tests de bout en bout Playwright (backend requis)
+npm test         # 45 tests unitaires Karma / Jasmine
+npm run test:ci  # même chose en un seul passage, ChromeHeadless
+npm run test:e2e # 39 tests Playwright de bout en bout (backend requis)
 npm run build    # build de production
 ```
+
+> `npm run lint` est déclaré dans `package.json` mais **aucun linter n'est
+> installé** (`@angular-eslint` est absent) : le script échoue. Le typage est
+> vérifié par `npm run build`.
 
 Le backend doit tourner en parallèle :
 
 ```bash
-cd ../kayedaw-api && mvn spring-boot:run
+cd ../kayedaw-api-kotlin && mvn spring-boot:run
 ```
 
 ### Comptes de démonstration
 
 Recréés à chaque démarrage du backend (base H2 en mémoire) par
-`config/DonneesInitiales.kt` :
+`config/DatasInitiales.kt` :
 
 | Compte | Mot de passe | Rôle |
 |--------|--------------|------|
@@ -42,9 +47,9 @@ Le fichier `proxy.conf.json` redirige `/api` vers `http://localhost:8080` — ce
 Les séances passées sont enrichies avec les **observations officielles**
 Météo-France (API DPClim) si le secret est fourni. Deux façons :
 
-1. **En local** — `kayedaw-api/config/application.yml` (déjà en place, ignoré
-   par git, non empaqueté dans le JAR). Spring Boot le lit automatiquement :
-   `mvn spring-boot:run` suffit, aucun profil à activer.
+1. **En local** — `kayedaw-api-kotlin/config/application.yml` (déjà en place,
+   ignoré par git, non empaqueté dans le JAR). Spring Boot le lit
+   automatiquement : `mvn spring-boot:run` suffit, aucun profil à activer.
 2. **En production** — variable d'environnement, qui a la priorité :
 
 ```bash
@@ -65,6 +70,7 @@ toujours une prévision Open-Meteo — aucune observation n'existe encore.
 | `/seances/nouvelle` | Création / planification (date-heure, météo optionnelle) | `authGuard` |
 | `/seances/:id` | Détail + suppression | `authGuard` |
 | `/seances/:id/modifier` | Modification | `authGuard` |
+| `/profil` | Profil : nom, e-mail, changement de mot de passe | `authGuard` |
 | `/statistiques` | Indicateurs + répartition par type | `authGuard` |
 | `/administration` | Utilisateurs + métriques de l'API | `authGuard` + `adminGuard` |
 
@@ -196,15 +202,54 @@ motif — c'est l'équivalent front du `when` exhaustif de Kotlin.
 | `allure.pipe.spec.ts` | formatage, arrondi à 60 s, valeurs nulles | non |
 | `duree.pipe.spec.ts` | heures/minutes | non |
 | `seance.validators.spec.ts` | date future, allure irréaliste | non |
+| `auth.validators.spec.ts` | format d'e-mail, mots de passe triviaux, score de robustesse | non |
 | `seance.service.spec.ts` | URL, méthode, params, 422 | `HttpTestingController` |
+| `admin.service.spec.ts` | liste, métriques, propagation du 403 | `HttpTestingController` |
 | `auth.interceptor.spec.ts` | en-tête ajouté / absent / routes publiques | `HttpTestingController` |
 | `auth.guard.spec.ts` | autorisation et redirection | `runInInjectionContext` |
+
+Soit **45 tests unitaires**.
 
 Les pipes et validateurs se testent **sans TestBed** : ce sont des fonctions
 pures, donc des tests en millisecondes. C'est la base de la pyramide côté front.
 
 `httpMock.verify()` en fin de test échoue s'il reste une requête non consommée —
 excellent garde-fou contre les appels involontaires.
+
+### Bout en bout (Playwright)
+
+39 tests dans `e2e/`, couvrant connexion, inscription, séances, statistiques,
+administration et responsive.
+
+```bash
+npm run test:e2e                      # tous les projets
+npx playwright test --project=mobile  # uniquement les tests @mobile
+npm run test:e2e:ui                   # runner interactif
+```
+
+`playwright.config.ts` démarre `ng serve` lui-même (`reuseExistingServer`), mais
+**le backend sur `:8080` est un prérequis qu'il ne peut pas démarrer** — il vit
+dans l'autre dépôt.
+
+Deux projets : `chromium` (bureau) et `mobile` (390 × 844, toujours Chromium — le
+profil iPhone exige WebKit, 300 Mo de téléchargement sans bénéfice pour un
+contrôle de débordement).
+
+Trois partis pris qui expliquent la forme des tests :
+
+- **La suite responsive vérifie une grandeur mesurable**, pas une impression
+  esthétique : `document.scrollWidth <= clientWidth + 1`. Le débordement
+  horizontal est le vrai défaut sur petit écran — c'est ainsi qu'un dépassement
+  de 136 px a été détecté sur `/administration`.
+- **L'état est préparé par l'API, pas par des clics** (`creerCompte`, `creerSeance`
+  dans `e2e/aide.ts`) : construire l'état à la souris est lent et casse pour des
+  raisons étrangères à ce que le test vérifie. Chaque test destructif
+  d'administration travaille sur son propre compte fraîchement créé.
+- **Aucune assertion sur une donnée modifiable** : le nom du compte de démo est
+  éditable depuis `/profil`, les tests s'appuient donc sur l'e-mail.
+
+`e2e/` est exclu de `tsconfig.json` — sans cela, `ng build` tente de compiler les
+specs.
 
 ---
 
