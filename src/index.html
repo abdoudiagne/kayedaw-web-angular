@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>KayeDaw — Carnet d'entraînement</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="KayeDaw — carnet d'entraînement course à pied : séances, allures, statistiques et météo.">
+
+  <!--
+    Favicon et icône d'écran d'accueil, dérivées du logo KayeDaw.
+
+    Chemins ABSOLUS (/assets/…) et non relatifs : une URL relative se résout
+    contre l'URL du document, donc sur une route profonde comme
+    /seances/12/modifier le navigateur chercherait /seances/12/assets/…
+    Le <base href="/"> couvre ce cas, mais autant ne pas en dépendre pour une
+    ressource aussi peu diagnosticable qu'un favicon.
+
+    Trois tailles déclarées : un 64x64 réduit à la volée par le navigateur rend
+    flou dans l'onglet. On fournit le 16 et le 32 déjà réduits.
+  -->
+  <!-- Le SVG d'abord : les navigateurs qui le gèrent l'utilisent, les autres
+       tombent sur les PNG déclarés ensuite. -->
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+
+  <!-- Couleur de la barre d'adresse sur mobile, accordée à la charte -->
+  <meta name="theme-color" content="#0f4c81" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#071a2c" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+  <app-root>
+    <!--
+      Écran d'attente affiché avant l'amorçage d'Angular : il évite la page
+      blanche sur une connexion lente. Angular le remplace en montant AppComponent.
+    -->
+    <div class="amorcage">
+      <img src="/assets/favicon.png" alt="" width="56" height="56">
+      <span>KayeDaw</span>
+    </div>
+  </app-root>
+</body>
+</html>

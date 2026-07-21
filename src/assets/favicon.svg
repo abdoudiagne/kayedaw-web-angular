@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="KayeDaw">
+  <!--
+    Favicon dessiné POUR la taille d'onglet, et non recadré depuis le logo :
+    l'emblème du coureur, réduit à 16 px, devient une tache illisible.
+
+    Un favicon lisible tient en trois règles : une forme pleine, un contraste
+    fort, et deux couleurs maximum. D'où le monogramme sur aplat dégradé.
+
+    Format SVG : net à toutes les tailles et à tous les zooms, là où un PNG
+    16x16 est figé. Les PNG restent déclarés en repli dans index.html.
+  -->
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f4c81"/>
+      <stop offset="55%" stop-color="#2b7bbf"/>
+      <stop offset="100%" stop-color="#14a8a0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="url(#fond)"/>
+
+  <!-- Monogramme K, tracé en épaisseurs larges pour rester lisible réduit -->
+  <path d="M20 15 V49" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M43 15 L25 32 L44 49" stroke="#fff" stroke-width="7"
+        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Accent orange : le rappel de la foulée, sans détail superflu -->
+  <circle cx="47" cy="20" r="5" fill="#f07e2b"/>
+</svg>

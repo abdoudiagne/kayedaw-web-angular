@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.angular/
+coverage/
+.env
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
