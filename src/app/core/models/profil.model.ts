@@ -6,6 +6,9 @@ export interface Profil {
   readonly nom: string;
   readonly role: Role;
   readonly villeParDefaut: string;
+  /** Pays de résidence, « France » par défaut. Accompagne la ville pour le
+      géocodage : « Lille » existe aussi en Belgique et aux États-Unis. */
+  readonly pays: string;
   readonly nombreSeances: number;
   readonly distanceTotaleKm: number;
   readonly premiereSeance: string | null;

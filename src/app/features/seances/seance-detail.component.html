@@ -1,0 +1,134 @@
+@if (seance(); as s) {
+  <article>
+    <a routerLink="/seances" class="fil">‹ Mes séances</a>
+
+    <header class="titre">
+      <div>
+        <span class="etiquette-type" [attr.data-type]="s.type">{{ libelleType(s.type) }}</span>
+        @if (estEnCours(s)) {
+          <span class="badge-active">En cours</span>
+        } @else if (s.estPlanifiee) {
+          <span class="badge-planifiee">Planifiée</span>
+        }
+        <h1>{{ s.dateHeure | date:'EEEE d MMMM y, HH:mm' }}</h1>
+      </div>
+      <span class="intensite">Intensité {{ s.intensite }}</span>
+    </header>
+
+    <!--
+      L'emoji est purement DÉCORATIF : le dt porte déjà l'intitulé.
+      D'où aria-hidden sur chacun — sinon un lecteur d'écran annoncerait
+      « règle droite Distance 12 kilomètres », ce qui parasite l'écoute.
+    -->
+    <dl class="mesures">
+      <div>
+        <dt><span class="pictogramme" aria-hidden="true">📏</span> Distance</dt>
+        <dd>{{ s.distanceKm }} <small>km</small></dd>
+      </div>
+      <div>
+        <dt><span class="pictogramme" aria-hidden="true">⏱️</span> Durée</dt>
+        <dd>{{ s.dureeMinutes | duree }}</dd>
+      </div>
+      <div>
+        <dt><span class="pictogramme" aria-hidden="true">🏃</span> Allure moyenne</dt>
+        <dd>{{ s.allureMinParKm | allure }}</dd>
+      </div>
+      <div>
+        <dt><span class="pictogramme" aria-hidden="true">⚡</span> Vitesse moyenne</dt>
+        <dd>{{ s.vitesseKmH }} <small>km/h</small></dd>
+      </div>
+    </dl>
+
+    <!--
+      La ville ne suffit pas : depuis que l'horizon de planification (30 j)
+      dépasse la portée des prévisions (J+15), une séance lointaine revient
+      avec une ville et une source MAIS aucune mesure. La section s'ouvrait
+      alors sur un en-tête « Prévision Open-Meteo » suivi d'une liste vide,
+      ce qui se lit comme une panne plutôt que comme une limite connue.
+    -->
+    @if (s.ville && aMeteo(s)) {
+      <section class="meteo carte">
+        <h2>
+          Conditions à {{ s.ville }}@if (s.pays) { <span class="pays">, {{ s.pays }}</span> }
+          @if (s.sourceMeteo) {
+            <span class="source" [class.prevision]="s.sourceMeteo === 'PREVISION_OPEN_METEO'">
+              {{ libelleSource(s.sourceMeteo) }}@if (s.stationMeteo) { · {{ s.stationMeteo }} }
+            </span>
+          }
+        </h2>
+        <!--
+          Une liste de définitions plutôt qu'une suite de nombres : chaque
+          valeur est explicitement rattachée à ce qu'elle mesure.
+          L'ancien « ↕ 23 °C / 13 °C » n'indiquait pas lequel était le
+          maximum, et les emojis seuls ne disent rien à un lecteur d'écran.
+        -->
+        <dl class="releve">
+          @if (s.temperatureALHeureC !== null) {
+            <div class="phare">
+              <dt>Température à l'heure de la séance</dt>
+              <dd><span aria-hidden="true">🌡️</span> {{ s.temperatureALHeureC }} °C</dd>
+            </div>
+          }
+          @if (s.temperatureMaxC !== null) {
+            <div>
+              <dt>Maximum du jour</dt>
+              <dd><span aria-hidden="true">🔺</span> {{ s.temperatureMaxC }} °C</dd>
+            </div>
+          }
+          @if (s.temperatureMinC !== null) {
+            <div>
+              <dt>Minimum du jour</dt>
+              <dd><span aria-hidden="true">🔻</span> {{ s.temperatureMinC }} °C</dd>
+            </div>
+          }
+          @if (s.ventKmH !== null) {
+            <div>
+              <dt>Vent maximal</dt>
+              <dd><span aria-hidden="true">💨</span> {{ s.ventKmH }} km/h</dd>
+            </div>
+          }
+          @if (s.precipitationMm !== null) {
+            <div>
+              <dt>Précipitations</dt>
+              <dd><span aria-hidden="true">🌧️</span> {{ s.precipitationMm }} mm</dd>
+            </div>
+          }
+          @if (s.pm25 !== null) {
+            <div>
+              <dt>Particules fines PM2.5</dt>
+              <dd><span aria-hidden="true">🫁</span> {{ s.pm25 }} µg/m³</dd>
+            </div>
+          }
+        </dl>
+        @if (s.alertesMeteo.length > 0) {
+          <ul class="alertes">
+            @for (alerte of s.alertesMeteo; track alerte) { <li>⚠ {{ alerte }}</li> }
+          </ul>
+        }
+      </section>
+    }
+
+    @if (s.commentaire) {
+      <section class="commentaire carte">
+        <h2>Commentaire</h2>
+        <p>{{ s.commentaire }}</p>
+      </section>
+    }
+
+    <div class="actions">
+      <a pButton [routerLink]="['/seances', s.id, 'modifier']">
+        <i class="pi pi-pencil" aria-hidden="true"></i> Modifier
+      </a>
+      <p-button [label]="suppressionEnCours() ? 'Suppression…' : 'Supprimer'"
+                icon="pi pi-trash" severity="danger" [outlined]="true"
+                [loading]="suppressionEnCours()" [disabled]="suppressionEnCours()"
+                (onClick)="supprimer(s.id)" />
+    </div>
+  </article>
+} @else {
+  <div aria-busy="true">
+    <p class="sr-only">Chargement de la séance…</p>
+    <p-skeleton height="3.5rem" width="22rem" styleClass="mb-3" />
+    <p-skeleton height="7rem" borderRadius="1.25rem" />
+  </div>
+}

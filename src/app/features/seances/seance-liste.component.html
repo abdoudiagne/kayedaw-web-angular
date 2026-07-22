@@ -1,0 +1,265 @@
+<header class="titre">
+  <div>
+    <h1>Mes séances</h1>
+    <p class="silence">Votre carnet, sortie après sortie.</p>
+  </div>
+  <div class="actions-titre">
+    <!--
+      L'export porte sur le CARNET COMPLET, pas sur la page ni sur les filtres
+      affichés : un document dont le contenu dépend de l'état de l'écran au
+      moment du clic est impossible à relire six mois plus tard.
+    -->
+    <p-button label="Exporter en PDF" icon="pi pi-file-pdf" severity="secondary"
+              [outlined]="true" [loading]="exportEnCours()"
+              [disabled]="exportEnCours()" (onClick)="exporter()" />
+    <a pButton routerLink="/seances/nouvelle"><i class="pi pi-plus" aria-hidden="true"></i> Nouvelle séance</a>
+  </div>
+</header>
+
+@if (resume(); as r) {
+  <!-- Résumé en tête : le contexte avant la liste, pas après -->
+  <dl class="resume">
+    <div>
+      <dt>Cette semaine</dt>
+      <dd>{{ r.volumeSemaine }} <small>/ {{ plafondKm }} km</small></dd>
+      <div class="jauge"><span [style.width.%]="r.pourcentagePlafond"
+                               [class.proche]="r.pourcentagePlafond >= 80"></span></div>
+    </div>
+    <div><dt>À venir</dt><dd>{{ r.planifiees }}</dd></div>
+    <div><dt>Sur la période</dt><dd>{{ r.total }}</dd></div>
+  </dl>
+}
+
+<form class="filtres" [formGroup]="filtres">
+  <div>
+    <label class="etiquette" for="filtreType">Type</label>
+    <p-select inputId="filtreType" [options]="optionsType" optionLabel="libelle"
+              optionValue="valeur" formControlName="type" placeholder="Tous"
+              [showClear]="true" styleClass="pleine-largeur" ariaLabel="Type" />
+  </div>
+
+  <div>
+    <label class="etiquette" for="debut">Du</label>
+    <input pInputText id="debut" type="date" formControlName="debut" />
+  </div>
+
+  <div>
+    <label class="etiquette" for="fin">Au</label>
+    <input pInputText id="fin" type="date" formControlName="fin" />
+  </div>
+
+  <div class="large">
+    <label class="etiquette" for="recherche">Recherche</label>
+    <input pInputText id="recherche" type="search" formControlName="recherche"
+           placeholder="commentaire ou ville" class="pleine-largeur" />
+  </div>
+
+  <div>
+    <label class="etiquette" for="tri">Trier par</label>
+    <p-select inputId="tri" [options]="optionsTri" optionLabel="libelle" optionValue="valeur"
+              formControlName="tri" styleClass="pleine-largeur" ariaLabel="Trier par" />
+  </div>
+
+  @if (filtresActifs()) {
+    <p-button label="Réinitialiser" severity="secondary" [text]="true" [size]="'small'"
+              (onClick)="reinitialiser()" />
+  }
+</form>
+
+<!-- Bornes inversées : le serveur renvoie une page vide, impossible à
+     distinguer d'une période réellement sans sortie. -->
+@if (periodeInvalide()) {
+  <p class="alerte-periode" role="alert">
+    La date « au » précède la date « du » : aucune séance ne peut correspondre.
+  </p>
+}
+
+<!-- aria-busy porte l'attente pour les lecteurs d'écran, l'atténuation
+     visuelle la porte pour les autres : la liste reste lisible, mais on
+     voit qu'elle n'est plus à jour. -->
+<div class="resultats" [attr.aria-busy]="enChargement()" [class.en-attente]="enChargement()">
+@if (resultat(); as page) {
+  @if (page.content.length === 0) {
+    <div class="vide">
+      <img src="assets/favicon.png" alt="" width="72" height="72" />
+      <h2>Aucune séance pour le moment</h2>
+      <p class="silence">Enregistrez votre première sortie, le reste se calcule tout seul.</p>
+      <a pButton routerLink="/seances/nouvelle">Enregistrer une séance</a>
+    </div>
+  } @else {
+    <!--
+      Séparer l'à-venir du réalisé : une séance planifiée ne se lit pas
+      comme une séance courue, les mélanger dans une même liste triée
+      obligeait à décoder le badge ligne par ligne.
+    -->
+    <!--
+      EN COURS en tête, avant l'à-venir et le réalisé : c'est la seule
+      section qui parle de l'instant présent, elle ne peut pas être noyée
+      au milieu de l'historique.
+    -->
+    @if (enCours().length > 0) {
+      <h2 class="section-liste">
+        En cours <span class="compteur vif">{{ enCours().length }}</span>
+      </h2>
+      <ul class="liste">
+        @for (seance of enCours(); track seance.id) {
+          <li class="seance active">
+            <span class="pastille-active" aria-hidden="true"></span>
+            <span class="sr-only">Séance en cours.</span>
+            <ng-container *ngTemplateOutlet="ligne; context: { $implicit: seance }" />
+          </li>
+        }
+      </ul>
+    }
+
+    @if (planifiees().length > 0) {
+      <h2 class="section-liste">À venir <span class="compteur">{{ planifiees().length }}</span></h2>
+      <ul class="liste">
+        @for (seance of planifiees(); track seance.id; let i = $index) {
+          <li class="seance planifiee" [style.animation-delay.ms]="i * 35">
+            <ng-container *ngTemplateOutlet="ligne; context: { $implicit: seance }" />
+          </li>
+        }
+      </ul>
+    }
+
+    @if (realisees().length > 0) {
+      <h2 class="section-liste">Réalisées</h2>
+    }
+    <ul class="liste">
+      <!--
+        track est OBLIGATOIRE avec @for. Il permet à Angular de réutiliser
+        les nœuds DOM existants au lieu de tout recréer. Utiliser l'index
+        comme clé annule ce bénéfice dès que la liste est réordonnée.
+      -->
+      @for (seance of realisees(); track seance.id; let i = $index) {
+        <!-- Décalage d'apparition : la liste se déroule au lieu de surgir d'un bloc -->
+        <li class="seance" [style.animation-delay.ms]="i * 35">
+          <ng-container *ngTemplateOutlet="ligne; context: { $implicit: seance }" />
+        </li>
+      }
+    </ul>
+
+    <!--
+      Une seule définition de ligne pour les deux listes : sans ce template
+      partagé, toute évolution devrait être faite en double, et finirait
+      par diverger.
+    -->
+    <ng-template #ligne let-seance>
+      <a [routerLink]="['/seances', seance.id]">
+        <span class="etiquette-type" [attr.data-type]="seance.type">{{ libelleType(seance.type) }}</span>
+        <span class="date">{{ seance.dateHeure | date:'dd/MM à HH:mm' }}</span>
+        <!--
+          Chaque mesure porte son ÉTIQUETTE : sans elle, « 1h02 » posé
+          juste après « 20/07 à 07:30 » se lit comme une heure et non
+          comme une durée, et rien ne distingue l'allure du reste.
+          L'étiquette est visuellement discrète mais lue par les lecteurs
+          d'écran, qui annonçaient jusqu'ici trois nombres sans contexte.
+        -->
+        <span class="mesure m-distance">
+          <span class="intitule">Distance</span>
+          <span class="valeur"><strong>{{ seance.distanceKm }}</strong> km</span>
+        </span>
+        <span class="mesure m-duree">
+          <span class="intitule">Durée</span>
+          <span class="valeur">{{ seance.dureeMinutes | duree }}</span>
+        </span>
+        <span class="mesure m-allure">
+          <span class="intitule">Allure</span>
+          <span class="valeur allure">{{ seance.allureMinParKm | allure }}</span>
+        </span>
+        <!-- La vitesse accompagne l'allure : son sens de lecture est
+             inverse, les voir ensemble évite de confondre les deux. -->
+        <span class="mesure m-vitesse">
+          <span class="intitule">Vitesse</span>
+          <span class="valeur">{{ seance.vitesseKmH }} km/h</span>
+        </span>
+        <span class="chevron" aria-hidden="true">›</span>
+      </a>
+
+      <!-- Météo : visible aussi sur les séances à venir, avec sa nature.
+           La garde est déportée dans aMeteo() et couvre TOUS les champs
+           rendus ci-dessous — voir le commentaire de la méthode. -->
+      @if (aMeteo(seance)) {
+        <p class="meteo-ligne">
+          <!-- Le PAYS accompagne la ville : depuis qu'une séance porte son
+               propre pays, « Saint-Louis » ou « Dakar » seuls ne disent plus
+               où l'on a couru. Il est affiché systématiquement et non
+               seulement quand il diffère du profil — le masquer ferait
+               dépendre la liste d'une donnée de compte modifiable. -->
+          @if (seance.ville) {
+            <span class="ville">{{ seance.ville }}</span>
+            @if (seance.pays) { <span class="pays">{{ seance.pays }}</span> }
+          }
+          <!-- L'emoji décore, le mot informe : seul, un pictogramme est
+               ambigu et invisible pour un lecteur d'écran. -->
+          <!-- Les trois températures sont indépendantes : le relevé à
+               l'heure de la séance n'est PAS un substitut du max du jour,
+               il répond à « quelle chaleur ai-je subie ». Un @else if entre
+               les deux effaçait le max dès qu'une observation horaire
+               existait. -->
+          @if (seance.temperatureALHeureC !== null) {
+            <span><span aria-hidden="true">🌡️</span> {{ seance.temperatureALHeureC }} °C</span>
+          }
+          @if (seance.temperatureMaxC !== null) {
+            <span><span aria-hidden="true">🔺</span> {{ seance.temperatureMaxC }} °C max</span>
+          }
+          @if (seance.temperatureMinC !== null) {
+            <span><span aria-hidden="true">🔻</span> {{ seance.temperatureMinC }} °C min</span>
+          }
+          @if (seance.ventKmH !== null) {
+            <span><span aria-hidden="true">💨</span> vent {{ seance.ventKmH }} km/h</span>
+          }
+          <!-- 0 mm est une information (il n'a pas plu), pas une absence :
+               le test porte sur null, surtout pas sur la valeur falsy. -->
+          @if (seance.precipitationMm !== null) {
+            <span><span aria-hidden="true">🌧️</span> pluie {{ seance.precipitationMm }} mm</span>
+          }
+          <!--
+            Le badge est conditionné à estPlanifiee, PAS au seul type de
+            source : l'archive Open-Meteo s'arrête à hier, donc une séance
+            courue AUJOURD'HUI est enrichie par la prévision et portait
+            « prévision » alors qu'elle était bel et bien réalisée. Le mot
+            laissait croire que la séance n'avait pas eu lieu.
+            La provenance exacte reste lisible sur l'écran de détail, où
+            elle est nommée en toutes lettres.
+          -->
+          @if (seance.estPlanifiee && seance.sourceMeteo === 'PREVISION_OPEN_METEO') {
+            <span class="prevision">météo prévue</span>
+          }
+          @if (seance.alertesMeteo.length > 0) {
+            <span class="alertes">⚠ {{ seance.alertesMeteo.join(' · ') }}</span>
+          }
+        </p>
+      }
+    </ng-template>
+
+    <!--
+      p-paginator raisonne en PREMIER ÉLÉMENT (first), Spring Data en NUMÉRO DE
+      PAGE : la conversion se fait dans `allerPageParIndex()`.
+
+      Le choix du NOMBRE DE LIGNES manquait : le carnet était figé à vingt
+      séances par page, sans aucun moyen d'en voir plus — ni même de savoir
+      combien il y en avait en tout. Le rapport porte désormais les deux
+      informations.
+
+      ⚠️ `[currentPageReportTemplate]` en LIAISON, pas en attribut littéral :
+      dans un attribut, Angular lit `{first}` comme le début d'un message ICU
+      et refuse de compiler le gabarit.
+    -->
+    <p-paginator [first]="page.number * page.size" [rows]="page.size"
+                 [rowsPerPageOptions]="[10, 20, 50]"
+                 [totalRecords]="page.totalElements" [showCurrentPageReport]="true"
+                 [currentPageReportTemplate]="'{first} à {last} sur {totalRecords} séance(s)'"
+                 (onPageChange)="changerPagination($event.page ?? 0, $event.rows ?? 20)" />
+  }
+} @else {
+  <!-- Squelettes plutôt qu'un texte : on montre la forme de ce qui arrive -->
+  <ul class="liste" aria-busy="true">
+    <li class="sr-only">Chargement des séances…</li>
+    @for (barre of squelettes; track barre) {
+      <li><p-skeleton height="3.6rem" /></li>
+    }
+  </ul>
+}
+</div>

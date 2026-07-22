@@ -1,0 +1,120 @@
+.fil { display: inline-block; margin-bottom: .75rem; color: var(--texte-doux);
+       text-decoration: none; font-size: .9rem; transition: color var(--transition); }
+.fil:hover { color: var(--azur); }
+
+/*
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ Deux colonnes : la saisie à gauche, ses conséquences à droite           │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * `minmax(0, 1fr)` et non `1fr` : un enfant de grille a une taille minimale
+ * automatique égale à son contenu, et la grille des mesures météo la faisait
+ * déborder au lieu de se replier.
+ *
+ * 22rem pour la colonne : en deçà, les cinq mesures s'empilent sur trois
+ * rangées et la colonne devient plus haute que le formulaire qu'elle
+ * accompagne.
+ */
+.plan { display: grid; grid-template-columns: minmax(0, 1fr) 22rem;
+        gap: 1.5rem; align-items: start; }
+/* En modification, pas de météo : le formulaire reprend toute la largeur. */
+.plan.sans-meteo { grid-template-columns: minmax(0, 48rem); }
+
+@media (max-width: 62rem) {
+  /* Sous cette largeur, deux colonnes rendraient les deux illisibles. */
+  .plan { grid-template-columns: 1fr; }
+}
+
+/* La colonne suit le défilement : c'est tout l'intérêt du déplacement.
+   `top` dégage la hauteur de l'en-tête collant. */
+/* `margin-top` identique à celui du formulaire : sans lui la colonne
+   démarrait 1.5rem plus haut que la carte qu'elle accompagne, et le décalage
+   se voyait. */
+.colonne-meteo { position: sticky; top: 5.5rem; margin-top: 1.5rem;
+                 display: grid; gap: .75rem; }
+
+/* 48rem au lieu de 38 : les deux colonnes de la ligne « type / date » étaient
+   à l'étroit. La largeur reste en deçà du conteneur : un formulaire pleine
+   largeur donne des lignes de saisie plus longues que l'œil ne peut suivre. */
+.formulaire { display: grid; gap: .35rem; max-width: 48rem; margin-top: 1.5rem;
+              padding: clamp(1.25rem, 3vw, 2.25rem); }
+.ligne { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.etiquette { display: block; }
+label.etiquette { margin-top: .9rem; }
+textarea.champ { resize: vertical; min-height: 5rem; }
+
+.actions { display: flex; align-items: center; gap: .75rem; margin-top: 1.75rem; flex-wrap: wrap; }
+.erreur { color: var(--danger); font-size: .85rem; margin: .25rem 0 0; }
+.aide { color: var(--texte-doux); font-size: .8rem; margin: .25rem 0 0; }
+.aide.planifiee { color: var(--azur); font-weight: 550; }
+.aide.hors-portee { color: var(--alerte); font-weight: 550; }
+/* Motif d'inactivité du bouton, posé sur la même ligne que lui. */
+.raison-inactif { color: var(--texte-doux); font-size: .82rem; margin: 0; }
+
+/* Plus de marge haute : dans la colonne, l'aperçu est le premier élément et
+   doit s'aligner sur le haut du formulaire, pas flotter en dessous. */
+.apercu-meteo { margin-top: 0; padding: .9rem 1.1rem; border-radius: .65rem;
+                background: color-mix(in srgb, var(--azur) 7%, transparent);
+                border: 1px solid color-mix(in srgb, var(--azur) 22%, transparent);
+                animation: apparition 260ms ease-out; }
+.apercu-meteo header { display: flex; align-items: center; gap: .5rem;
+                       flex-wrap: wrap; margin-bottom: .6rem; }
+.apercu-meteo .source { padding: .12rem .5rem; border-radius: 999px; font-size: .66rem;
+                        font-weight: 700; text-transform: uppercase;
+                        background: var(--pastille-turquoise-fond);
+                        color: var(--pastille-turquoise-texte); }
+.apercu-meteo .source.prevision { background: var(--pastille-orange-fond);
+                                  color: var(--pastille-orange-texte); }
+.apercu-meteo .station { font-size: .72rem; color: var(--texte-doux); }
+.apercu-meteo dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+                   gap: .75rem; margin: 0; }
+.apercu-meteo dt { font-size: .66rem; font-weight: 700; letter-spacing: .04em;
+                   text-transform: uppercase; color: var(--texte-doux); }
+.apercu-meteo dd { margin: .15rem 0 0; font-size: .98rem; font-weight: 600;
+                   font-variant-numeric: tabular-nums; }
+.apercu-meteo .alertes { margin: .7rem 0 0; font-size: .85rem; color: var(--alerte); }
+.apercu-attente { height: 6rem; margin-top: 0; }
+
+.autocompletion { position: relative; }
+.suggestions { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + .25rem);
+               list-style: none; margin: 0; padding: .25rem;
+               background: var(--surface); border: 1px solid var(--bordure);
+               border-radius: .65rem; box-shadow: var(--ombre-3);
+               max-height: 14rem; overflow-y: auto;
+               animation: apparition 160ms ease-out; }
+.suggestions li { display: flex; align-items: center; justify-content: space-between;
+                  gap: .75rem; padding: .5rem .65rem; border-radius: .45rem;
+                  cursor: pointer; font-size: .92rem; }
+.suggestions li:hover, .suggestions li.actif { background: var(--surface-douce); }
+.suggestions li.actif { outline: 2px solid var(--azur); outline-offset: -2px; }
+.departement { font-size: .75rem; color: var(--texte-doux);
+               font-variant-numeric: tabular-nums; }
+
+/* Aperçu d'allure : teinté marque, il se distingue d'un message d'erreur */
+.apercu { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+          margin-top: 1.15rem; padding: .85rem 1rem; border-radius: .65rem;
+          background: color-mix(in srgb, var(--turquoise) 10%, transparent);
+          border: 1px solid color-mix(in srgb, var(--turquoise) 25%, transparent);
+          animation: apparition 260ms ease-out; }
+.estimation { display: grid; gap: .1rem; }
+.estimation .intitule { font-size: .68rem; font-weight: 700; letter-spacing: .05em;
+                        text-transform: uppercase; color: var(--texte-doux); }
+.estimation strong { font-size: 1.25rem; letter-spacing: -.01em;
+                     font-variant-numeric: tabular-nums; }
+.estimation .repere { font-size: .7rem; color: var(--texte-doux); }
+@media (max-width: 30rem) { .apercu { grid-template-columns: 1fr; } }
+
+.refus { margin-top: 1.25rem; padding: 1rem 1.15rem; border-radius: .65rem;
+         border-left: 4px solid var(--danger);
+         background: color-mix(in srgb, var(--danger) 8%, transparent);
+         animation: apparition 260ms ease-out; }
+.refus p { margin: .35rem 0 0; color: var(--texte-doux); }
+
+@media (max-width: 34rem) { .ligne { grid-template-columns: 1fr; gap: 0; } }
+
+/* Emplacement en attente : une colonne vide se lirait comme une panne. */
+.attente-meteo {
+  margin: 0; padding: 1.1rem 1.25rem; border-radius: var(--rayon);
+  border: 1px dashed var(--bordure); background: var(--surface-douce);
+  color: var(--texte-doux); font-size: .86rem; text-align: center;
+}

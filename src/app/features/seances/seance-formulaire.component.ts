@@ -1,19 +1,29 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, OnInit, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, Injector, Input, OnInit, computed,
+  effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, of, Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, startWith, switchMap, tap } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, map, startWith, switchMap, tap } from 'rxjs/operators';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { AutoCompleteModule } from 'primeng/autocomplete';
+import { ButtonModule } from 'primeng/button';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
+import { SkeletonModule } from 'primeng/skeleton';
+import { TextareaModule } from 'primeng/textarea';
 import { ConditionsMeteo, RefusMetier, SuggestionVille, TYPES_SEANCE, TypeSeance }
   from '../../core/models/seance.model';
 import { VilleService } from '../../core/services/ville.service';
 import { MeteoService } from '../../core/services/meteo.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PreferencesService } from '../../core/services/preferences.service';
+import { Pays, PaysService } from '../../core/services/pays.service';
 import { SeanceService } from '../../core/services/seance.service';
 import { NotificationService } from '../../core/services/notification.service';
-import { allurePlausible, dansHorizonDePlanification, HORIZON_PLANIFICATION_JOURS }
-  from '../../shared/validators/seance.validators';
+import { allurePlausible, dansHorizonDePlanification, HORIZON_PLANIFICATION_JOURS,
+  PORTEE_PREVISION_JOURS, villeRequise } from '../../shared/validators/seance.validators';
 import { AllurePipe } from '../../shared/pipes/allure.pipe';
 
 /**
@@ -26,283 +36,66 @@ import { AllurePipe } from '../../shared/pipes/allure.pipe';
  * Toute valeur destinée à être comparée à ce que le serveur renverra doit
  * passer par ici, sinon l'affichage diverge.
  */
+/**
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ Le contrôle « ville » n'est PAS toujours une chaîne, malgré son type    │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * `p-autoComplete.onOptionSelect` appelle `updateModel(option)` AVANT d'émettre
+ * `onSelect` — et `getOptionValue()` renvoie l'objet suggestion entier faute de
+ * `.value` dessus. Le contrôle reçoit donc `{nom, departement, …}` le temps
+ * d'un tour, avant que `choisir()` n'y remette la chaîne.
+ *
+ * Ce n'est pas cosmétique : un `.trim()` posé sur cette émission transitoire
+ * levait un TypeError À L'INTÉRIEUR d'un opérateur `map`, ce qui **termine la
+ * souscription**. Le signal qui en dépend restait figé DÉFINITIVEMENT, et le
+ * bouton « Enregistrer » ne se réactivait plus jamais.
+ *
+ * `nonNullable` ne protège de rien ici : TypeScript type le contrôle `string`
+ * et ne voit pas ce que le composant tiers y écrit.
+ */
+function nomDeVille(valeur: unknown): string {
+  if (typeof valeur === 'string') {
+    return valeur;
+  }
+  return (valeur as SuggestionVille | null)?.nom ?? '';
+}
+
 function arrondi2(valeur: number): number {
   return Math.round(valeur * 100) / 100;
 }
 
+function localISO(date: Date): string {
+  const decalage = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - decalage).toISOString().slice(0, 16);
+}
+
 function maintenantLocalISO(): string {
-  const maintenant = new Date();
-  const decalage = maintenant.getTimezoneOffset() * 60_000;
-  return new Date(maintenant.getTime() - decalage).toISOString().slice(0, 16);
+  return localISO(new Date());
+}
+
+/** Aujourd'hui à 00 h 00 : la journée entière reste sélectionnable. */
+function debutDeJournee(): string {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return localISO(date);
+}
+
+/** Dans 30 jours à 23 h 59, borne haute du sélecteur natif. */
+function borneHaute(): string {
+  const date = new Date();
+  date.setDate(date.getDate() + 30);
+  date.setHours(23, 59, 0, 0);
+  return localISO(date);
 }
 
 @Component({
-  selector: 'app-seance-formulaire',
-  standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, AllurePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <a routerLink="/seances" class="fil">‹ Mes séances</a>
-    <h1>{{ estModification() ? 'Modifier la séance' : 'Nouvelle séance' }}</h1>
-    <p class="silence">Distance et durée suffisent — allure et intensité sont calculées.</p>
-
-    <form [formGroup]="formulaire" (ngSubmit)="soumettre()" class="formulaire carte">
-      <div class="ligne">
-        <div>
-          <label class="etiquette requis" for="type">Type</label>
-          <select id="type" aria-required="true" class="champ" formControlName="type">
-            @for (type of typesDisponibles; track type.valeur) {
-              <option [value]="type.valeur">{{ type.libelle }}</option>
-            }
-          </select>
-        </div>
-
-        <div>
-          <label class="etiquette requis" for="dateHeure">Date et heure</label>
-          <!-- type datetime-local : le navigateur fournit jour + heure + minute -->
-          <input id="dateHeure" aria-required="true" class="champ" type="datetime-local" formControlName="dateHeure" />
-          @if (formulaire.controls.dateHeure.hasError('dateTropLointaine')
-               && formulaire.controls.dateHeure.touched) {
-            <p class="erreur">On ne planifie pas au-delà de {{ horizonJours }} jours.</p>
-          }
-          @if (estPlanifiee()) {
-            <p class="aide planifiee">📅 Séance planifiée — la météo affichée sera une prévision.</p>
-          }
-        </div>
-      </div>
-
-      <div class="ligne">
-        <div>
-          <label class="etiquette requis" for="distanceKm">Distance (km)</label>
-          <input id="distanceKm" aria-required="true" class="champ" type="number" step="0.1" min="0.1" formControlName="distanceKm" />
-          @if (formulaire.controls.distanceKm.invalid && formulaire.controls.distanceKm.touched) {
-            <p class="erreur">Distance obligatoire et positive.</p>
-          }
-        </div>
-
-        <div>
-          <label class="etiquette requis" for="dureeMinutes">Durée (minutes)</label>
-          <input id="dureeMinutes" aria-required="true" class="champ" type="number" min="1" formControlName="dureeMinutes" />
-          @if (formulaire.controls.dureeMinutes.invalid && formulaire.controls.dureeMinutes.touched) {
-            <p class="erreur">Durée obligatoire, au moins 1 minute.</p>
-          }
-        </div>
-      </div>
-
-      <!--
-        Retour immédiat calculé par un signal dérivé.
-
-        On affiche l'ALLURE ET LA VITESSE côte à côte : l'allure est une durée
-        par kilomètre, donc plus elle est BASSE plus on est rapide — un sens de
-        lecture inversé qui induit régulièrement en erreur. La vitesse, elle,
-        suit l'intuition « plus c'est haut, mieux c'est ». Les deux ensemble
-        lèvent l'ambiguïté sans avoir à l'expliquer.
-      -->
-      @if (allureCalculee(); as allure) {
-        <div class="apercu">
-          <div class="estimation">
-            <span class="intitule">Allure estimée</span>
-            <strong>{{ allure | allure }}</strong>
-            <span class="repere">plus c'est bas, plus c'est rapide</span>
-          </div>
-          <div class="estimation">
-            <span class="intitule">Vitesse</span>
-            <strong>{{ vitesseCalculee() }} km/h</strong>
-            <span class="repere">plus c'est haut, plus c'est rapide</span>
-          </div>
-        </div>
-      }
-      @if (formulaire.hasError('allureIrrealiste')) {
-        <p class="erreur">Cette allure paraît irréaliste — vérifiez distance et durée.</p>
-      }
-
-      @if (!estModification()) {
-        <label class="etiquette" for="ville">Ville (optionnel)</label>
-        <!--
-          Autocomplétion « maison » plutôt qu'un composant tiers : le besoin
-          tient en un input, une liste et quelques touches clavier.
-          Les attributs combobox, aria-expanded et aria-activedescendant
-          forment le motif ARIA attendu : sans eux, un lecteur d'écran ne
-          perçoit ni la liste ni l'option courante.
-        -->
-        <div class="autocompletion">
-          <input id="ville" class="champ" type="text" formControlName="ville" placeholder="Lille"
-                 autocomplete="off" role="combobox" aria-controls="suggestions-ville"
-                 [attr.aria-expanded]="suggestions().length > 0"
-                 [attr.aria-activedescendant]="indexActif() >= 0 ? 'ville-' + indexActif() : null"
-                 (input)="rechercherVille($any($event.target).value)"
-                 (keydown)="naviguer($event)" (blur)="fermerSuggestions()" />
-
-          @if (suggestions().length > 0) {
-            <ul id="suggestions-ville" class="suggestions" role="listbox">
-              @for (suggestion of suggestions(); track suggestion.nom; let i = $index) {
-                <li [id]="'ville-' + i" role="option" [attr.aria-selected]="i === indexActif()"
-                    [class.actif]="i === indexActif()"
-                    (mousedown)="choisir(suggestion)">
-                  <span>{{ suggestion.nom }}</span>
-                  @if (suggestion.departement) {
-                    <span class="departement">{{ suggestion.departement }}</span>
-                  }
-                </li>
-              }
-            </ul>
-          }
-        </div>
-        <p class="aide">Pré-remplie avec votre ville de référence. La météo suit la date choisie.</p>
-      }
-
-      <!--
-        APERÇU MÉTÉO EN DIRECT — avant tout enregistrement.
-        C'est ce qui rend la planification utile : on déplace la date ou l'heure
-        et l'on voit immédiatement les conditions, plutôt que de découvrir la
-        météo une fois la séance créée.
-      -->
-      @if (meteoApercu(); as meteo) {
-        <section class="apercu-meteo" aria-live="polite">
-          <header>
-            <strong>{{ meteo.ville }}</strong>
-            <span class="source" [class.prevision]="meteo.source === 'PREVISION_OPEN_METEO'">
-              {{ meteo.source === 'PREVISION_OPEN_METEO' ? 'prévision' : 'observé' }}
-            </span>
-            @if (meteo.station) { <span class="station">{{ meteo.station }}</span> }
-          </header>
-
-          <dl>
-            @if (meteo.temperatureALHeureC !== null) {
-              <div><dt>À l'heure prévue</dt>
-                   <dd><span aria-hidden="true">🌡️</span> {{ meteo.temperatureALHeureC }} °C</dd></div>
-            }
-            @if (meteo.temperatureMaxC !== null) {
-              <div><dt>Max du jour</dt>
-                   <dd><span aria-hidden="true">🔺</span> {{ meteo.temperatureMaxC }} °C</dd></div>
-            }
-            @if (meteo.temperatureMinC !== null) {
-              <div><dt>Min du jour</dt>
-                   <dd><span aria-hidden="true">🔻</span> {{ meteo.temperatureMinC }} °C</dd></div>
-            }
-            @if (meteo.ventMaxKmH !== null) {
-              <div><dt>Vent</dt>
-                   <dd><span aria-hidden="true">💨</span> {{ meteo.ventMaxKmH }} km/h</dd></div>
-            }
-            @if (meteo.precipitationMm !== null) {
-              <div><dt>Pluie</dt>
-                   <dd><span aria-hidden="true">🌧️</span> {{ meteo.precipitationMm }} mm</dd></div>
-            }
-          </dl>
-
-          @if (meteo.alertes.length > 0) {
-            <p class="alertes" role="alert">⚠ {{ meteo.alertes.join(' · ') }}</p>
-          }
-        </section>
-      } @else if (meteoEnCours()) {
-        <div class="squelette apercu-attente"></div>
-      }
-
-      <label class="etiquette" for="commentaire">Commentaire</label>
-      <textarea id="commentaire" class="champ" rows="3" formControlName="commentaire" maxlength="500"></textarea>
-
-      <div class="actions">
-        <button type="submit" class="bouton" [disabled]="envoiEnCours()">
-          {{ envoiEnCours() ? 'Enregistrement…' : 'Enregistrer' }}
-        </button>
-        <a routerLink="/seances" class="bouton fantome">Annuler</a>
-      </div>
-
-      <!--
-        Le 422 vient de la sealed interface côté Kotlin. On traduit chaque
-        motif en message métier explicite plutôt qu'en erreur technique.
-      -->
-      @if (refus(); as motif) {
-        <div class="refus" role="alert">
-          @switch (motif.motif) {
-            @case ('PLAFOND_HEBDOMADAIRE') {
-              <strong>Plafond hebdomadaire dépassé</strong>
-              <p>Cette séance porterait votre semaine à {{ motif.volumeCalculeKm }} km,
-                 au-delà du plafond de {{ motif.plafondKm }} km.</p>
-            }
-            @case ('DATE_TROP_LOINTAINE') {
-              <strong>Planification trop lointaine</strong>
-              <p>{{ motif.detail }}</p>
-            }
-          }
-        </div>
-      }
-    </form>
-  `,
-  styles: [`
-    .fil { display: inline-block; margin-bottom: .75rem; color: var(--texte-doux);
-           text-decoration: none; font-size: .9rem; transition: color var(--transition); }
-    .fil:hover { color: var(--azur); }
-
-    .formulaire { display: grid; gap: .35rem; max-width: 38rem; margin-top: 1.5rem;
-                  padding: clamp(1.25rem, 3vw, 2rem); }
-    .ligne { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .etiquette { display: block; }
-    label.etiquette { margin-top: .9rem; }
-    textarea.champ { resize: vertical; min-height: 5rem; }
-
-    .actions { display: flex; align-items: center; gap: .75rem; margin-top: 1.75rem; flex-wrap: wrap; }
-    .erreur { color: var(--danger); font-size: .85rem; margin: .25rem 0 0; }
-    .aide { color: var(--texte-doux); font-size: .8rem; margin: .25rem 0 0; }
-    .aide.planifiee { color: var(--azur); font-weight: 550; }
-
-    .apercu-meteo { margin-top: 1.15rem; padding: .9rem 1.1rem; border-radius: .65rem;
-                    background: color-mix(in srgb, var(--azur) 7%, transparent);
-                    border: 1px solid color-mix(in srgb, var(--azur) 22%, transparent);
-                    animation: apparition 260ms ease-out; }
-    .apercu-meteo header { display: flex; align-items: center; gap: .5rem;
-                           flex-wrap: wrap; margin-bottom: .6rem; }
-    .apercu-meteo .source { padding: .12rem .5rem; border-radius: 999px; font-size: .66rem;
-                            font-weight: 700; text-transform: uppercase;
-                            background: rgba(20, 168, 160, .16); color: #0c7a74; }
-    .apercu-meteo .source.prevision { background: rgba(240, 126, 43, .16); color: #c05f16; }
-    .apercu-meteo .station { font-size: .72rem; color: var(--texte-doux); }
-    .apercu-meteo dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-                       gap: .75rem; margin: 0; }
-    .apercu-meteo dt { font-size: .66rem; font-weight: 700; letter-spacing: .04em;
-                       text-transform: uppercase; color: var(--texte-doux); }
-    .apercu-meteo dd { margin: .15rem 0 0; font-size: .98rem; font-weight: 600;
-                       font-variant-numeric: tabular-nums; }
-    .apercu-meteo .alertes { margin: .7rem 0 0; font-size: .85rem; color: var(--alerte); }
-    .apercu-attente { height: 6rem; margin-top: 1.15rem; }
-
-    .autocompletion { position: relative; }
-    .suggestions { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + .25rem);
-                   list-style: none; margin: 0; padding: .25rem;
-                   background: var(--surface); border: 1px solid var(--bordure);
-                   border-radius: .65rem; box-shadow: var(--ombre-3);
-                   max-height: 14rem; overflow-y: auto;
-                   animation: apparition 160ms ease-out; }
-    .suggestions li { display: flex; align-items: center; justify-content: space-between;
-                      gap: .75rem; padding: .5rem .65rem; border-radius: .45rem;
-                      cursor: pointer; font-size: .92rem; }
-    .suggestions li:hover, .suggestions li.actif { background: var(--surface-douce); }
-    .suggestions li.actif { outline: 2px solid var(--azur); outline-offset: -2px; }
-    .departement { font-size: .75rem; color: var(--texte-doux);
-                   font-variant-numeric: tabular-nums; }
-
-    /* Aperçu d'allure : teinté marque, il se distingue d'un message d'erreur */
-    .apercu { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
-              margin-top: 1.15rem; padding: .85rem 1rem; border-radius: .65rem;
-              background: color-mix(in srgb, var(--turquoise) 10%, transparent);
-              border: 1px solid color-mix(in srgb, var(--turquoise) 25%, transparent);
-              animation: apparition 260ms ease-out; }
-    .estimation { display: grid; gap: .1rem; }
-    .estimation .intitule { font-size: .68rem; font-weight: 700; letter-spacing: .05em;
-                            text-transform: uppercase; color: var(--texte-doux); }
-    .estimation strong { font-size: 1.25rem; letter-spacing: -.01em;
-                         font-variant-numeric: tabular-nums; }
-    .estimation .repere { font-size: .7rem; color: var(--texte-doux); }
-    @media (max-width: 30rem) { .apercu { grid-template-columns: 1fr; } }
-
-    .refus { margin-top: 1.25rem; padding: 1rem 1.15rem; border-radius: .65rem;
-             border-left: 4px solid var(--danger);
-             background: color-mix(in srgb, var(--danger) 8%, transparent);
-             animation: apparition 260ms ease-out; }
-    .refus p { margin: .35rem 0 0; color: var(--texte-doux); }
-
-    @media (max-width: 34rem) { .ligne { grid-template-columns: 1fr; gap: 0; } }
-  `]
+    selector: 'app-seance-formulaire',
+    imports: [ReactiveFormsModule, RouterLink, AllurePipe, SelectModule, InputNumberModule,
+      InputTextModule, TextareaModule, ButtonModule, AutoCompleteModule, SkeletonModule],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    templateUrl: './seance-formulaire.component.html',
+    styleUrl: './seance-formulaire.component.scss'
 })
 export class SeanceFormulaireComponent implements OnInit {
 
@@ -320,9 +113,15 @@ export class SeanceFormulaireComponent implements OnInit {
   private readonly villes = inject(VilleService);
   private readonly meteo = inject(MeteoService);
   private readonly auth = inject(AuthService);
+  private readonly preferences = inject(PreferencesService);
+  private readonly referentielPays = inject(PaysService);
   private readonly destroyRef = inject(DestroyRef);
+  /** `effect()` exige un contexte d'injection : ngOnInit n'en est pas un. */
+  private readonly injecteur = inject(Injector);
 
   protected readonly typesDisponibles = TYPES_SEANCE;
+  /** p-select attend un tableau mutable : TYPES_SEANCE est readonly. */
+  protected readonly optionsType = [...TYPES_SEANCE];
   protected readonly horizonJours = HORIZON_PLANIFICATION_JOURS;
   protected readonly envoiEnCours = signal(false);
   protected readonly refus = signal<RefusMetier | null>(null);
@@ -332,6 +131,8 @@ export class SeanceFormulaireComponent implements OnInit {
   private readonly dateHeureSaisie = signal('');
 
   protected readonly suggestions = signal<readonly SuggestionVille[]>([]);
+  /** p-autoComplete exige un tableau mutable. */
+  protected readonly suggestionsVilles = computed(() => [...this.suggestions()]);
   protected readonly meteoApercu = signal<ConditionsMeteo | undefined>(undefined);
   protected readonly meteoEnCours = signal(false);
 
@@ -344,10 +145,38 @@ export class SeanceFormulaireComponent implements OnInit {
   /** -1 = aucune option survolée au clavier. */
   protected readonly indexActif = signal(-1);
 
+  /** Bornes du sélecteur natif : aujourd'hui 00 h 00 → J+30 à 23 h 59. */
+  protected readonly dateMin = debutDeJournee();
+  protected readonly dateMax = borneHaute();
+  protected readonly porteePrevisionJours = PORTEE_PREVISION_JOURS;
+
   /** Une date à venir bascule l'écran en mode « planification ». */
   protected readonly estPlanifiee = computed(() => {
     const valeur = this.dateHeureSaisie();
     return valeur !== '' && new Date(valeur) > new Date();
+  });
+
+  /**
+   * Séance planifiée AU-DELÀ de ce qu'Open-Meteo sait prévoir.
+   * L'horizon de planification vaut 30 jours, les prévisions 15 : entre les
+   * deux, la séance est parfaitement valide mais n'aura pas de météo.
+   */
+  protected readonly horsPorteePrevision = computed(() => {
+    const valeur = this.dateHeureSaisie();
+    if (valeur === '') {
+      return false;
+    }
+    /*
+     * ⚠️ La borne est la FIN du dernier jour couvert, pas l'instant présent
+     * décalé de N jours. Sans `setHours(23,59,59,999)`, une séance posée à
+     * 20 h le dernier jour utile tombait « hors portée » si l'écran était
+     * ouvert à 9 h du matin — un avertissement faux, sur une séance qui aura
+     * bel et bien sa météo.
+     */
+    const limite = new Date();
+    limite.setDate(limite.getDate() + PORTEE_PREVISION_JOURS);
+    limite.setHours(23, 59, 59, 999);
+    return new Date(valeur) > limite;
   });
 
   /**
@@ -385,14 +214,137 @@ export class SeanceFormulaireComponent implements OnInit {
     return arrondi2(d / (t / 60));
   });
 
-  protected readonly formulaire = this.fb.nonNullable.group({
-    type: ['ENDURANCE' as TypeSeance, [Validators.required]],
-    distanceKm: [0, [Validators.required, Validators.min(0.1), Validators.max(200)]],
-    dureeMinutes: [0, [Validators.required, Validators.min(1)]],
-    dateHeure: ['', [Validators.required, dansHorizonDePlanification]],
-    ville: [''],
-    commentaire: ['', [Validators.maxLength(500)]]
+  /**
+   * ⚠️ Distance et durée démarrent à `null`, PAS à 0.
+   *
+   * Un contrôle non nullable initialisé à 0 affiche « 0 » dans le champ : il
+   * fallait l'effacer avant de saisir, et un oubli envoyait une distance nulle
+   * que seul le validateur rattrapait. `null` laisse le champ VIDE, ce qui est
+   * l'état réel — rien n'a encore été saisi — et laisse le placeholder visible.
+   *
+   * Le groupe n'est donc plus entièrement `nonNullable` : ces deux contrôles
+   * sont déclarés à part, les autres gardent leur valeur de repli.
+   */
+  protected readonly formulaire = this.fb.group({
+    type: this.fb.nonNullable.control<TypeSeance>('ENDURANCE', [Validators.required]),
+    distanceKm: this.fb.control<number | null>(
+      null, [Validators.required, Validators.min(0.1), Validators.max(200)]),
+    dureeMinutes: this.fb.control<number | null>(
+      null, [Validators.required, Validators.min(1)]),
+    dateHeure: this.fb.nonNullable.control('', [Validators.required, dansHorizonDePlanification]),
+    /*
+     * Le pays est porté par la SÉANCE, pas seulement par le compte : on ne
+     * court pas toujours chez soi. Il est pré-rempli sur le pays du profil —
+     * le cas courant n'exige donc aucune saisie — et il PILOTE l'autocomplétion
+     * de la ville, qui vient juste après lui à l'écran pour cette raison.
+     */
+    pays: this.fb.nonNullable.control('', [Validators.required]),
+    ville: this.fb.nonNullable.control('', [villeRequise]),
+    commentaire: this.fb.nonNullable.control('', [Validators.maxLength(500)])
   }, { validators: allurePlausible });
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ La ville suivie EN SIGNAL, et non lue depuis le contrôle              │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Piège déjà payé ailleurs dans ce projet : un `computed()` qui lit
+   * `controls.ville.value` ne lit AUCUN signal. Il est évalué une fois, puis
+   * figé — ici sur « manquante », et le bouton ne se réactiverait jamais.
+   * `toSignal(valueChanges)` franchit la frontière RxJS → signaux.
+   *
+   * ⚠️ Le `?? ''` n'est pas de la prudence décorative. `p-autoComplete` écrit
+   * `null` — jamais `''` — dès que le champ est vidé : son `updateModel()`
+   * traite toute valeur FALSY comme « aucune sélection ». Le contrôle est
+   * pourtant déclaré `nonNullable`, donc TypeScript continue de le typer
+   * `string` et ne voit pas le trou. Sans normalisation, `.trim()` levait un
+   * TypeError DANS le computed : le gabarit cessait de se rafraîchir et le
+   * bouton restait actif — exactement l'inverse de la règle qu'il porte.
+   */
+  private readonly villeSaisie = toSignal(
+    this.formulaire.controls.ville.valueChanges.pipe(map(nomDeVille)),
+    { initialValue: '' }
+  );
+
+  /**
+   * Référentiel des pays, servi par l'API et jamais écrit en dur : le
+   * géocodage s'appuie sur la même liste, deux listes divergentes rendraient
+   * sélectionnables des pays sans aucune ville trouvable.
+   * Copie mutable — `p-select` refuse un tableau `readonly`.
+   */
+  protected readonly optionsPays = toSignal(
+    this.referentielPays.tous().pipe(map(liste => [...liste])),
+    { initialValue: [] as Pays[] }
+  );
+
+  private readonly paysSaisi = toSignal(
+    this.formulaire.controls.pays.valueChanges.pipe(map(valeur => valeur ?? '')),
+    { initialValue: '' }
+  );
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ EXISTENCE DE LA VILLE — un flux, PAS un validateur asynchrone         │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Écrit d'abord en `AsyncValidatorFn`, puis abandonné : le contrôle restait
+   * bloqué sur `PENDING`. Angular relance la validation à chaque
+   * `updateValueAndValidity` en annulant la précédente, et propage à
+   * `setErrors` l'option `emitEvent` de l'appel d'origine — la résolution
+   * arrivait donc sans `statusChanges`, et rien ne sortait jamais de l'état
+   * « vérification en cours ». Trois lancements pour une seule frappe.
+   *
+   * Un flux explicite rend le cycle lisible et le met sous le même régime que
+   * l'aperçu météo juste en dessous : `debounceTime` pour ne pas interroger à
+   * chaque touche, `switchMap` pour qu'une réponse lente n'écrase pas une
+   * réponse récente.
+   */
+  protected readonly villeInconnue = signal(false);
+  protected readonly villeEnVerification = signal(false);
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ « J'ai tapé bamb au Sénégal et Bambilor ne sort pas »                 │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Constaté en usage réel, et la cause est CHEZ LE GÉOCODEUR : Open-Meteo ne
+   * fait pas une recherche par préfixe mais par ressemblance, en pénalisant
+   * l'écart de longueur. Mesuré sur le Sénégal :
+   *
+   *   « bamb »  → Banba, Bamba, Mbamb — tous de cinq lettres, PAS Bambilor
+   *   « bambi » → Bambilor
+   *
+   * Ce n'est pas une troncature de notre côté : à `count=100` et sans filtre
+   * de pays, Bambilor est absent des cent résultats. Nominatim, essayé en
+   * comparaison, fait pire — il ne le trouve à aucune des deux longueurs.
+   *
+   * On ne peut donc pas le corriger. Ce qu'on peut faire, c'est ne pas laisser
+   * l'utilisateur devant une liste vide qui se lit « cette ville n'existe
+   * pas » : on lui dit de continuer à saisir. Le silence était le vrai défaut.
+   */
+  protected readonly saisieTropCourte = computed(() => {
+    const terme = this.villeSaisie().trim();
+    return !this.estModification()
+      && this.suggestions().length === 0
+      && terme.length >= 2 && terme.length < 5
+      && this.formulaire.controls.ville.dirty;
+  });
+
+  /** Vrais tant que le lieu manque — à la CRÉATION seulement. */
+  protected readonly paysManquant = computed(
+    () => !this.estModification() && this.paysSaisi().trim().length === 0
+  );
+  protected readonly villeManquante = computed(
+    () => !this.estModification() && this.villeSaisie().trim().length === 0
+  );
+  /**
+   * Le lieu n'est pas exploitable : manquant, inconnu, ou pas encore vérifié.
+   * C'est cette seule condition qui désactive « Enregistrer ».
+   */
+  protected readonly lieuIncomplet = computed(
+    () => this.paysManquant() || this.villeManquante()
+       || this.villeInconnue() || this.villeEnVerification()
+  );
 
   ngOnInit(): void {
     // Alimente les signaux pour le calcul d'allure en direct
@@ -419,11 +371,33 @@ export class SeanceFormulaireComponent implements OnInit {
      * debounceTime évite d'interroger à chaque frappe · distinctUntilChanged
      * ignore un retour à la même valeur · switchMap ANNULE la requête
      * précédente, sans quoi une réponse lente écraserait une réponse récente.
+     *
+     * ┌───────────────────────────────────────────────────────────────────┐
+     * │ ⚠️ La clé de déduplication inclut le PAYS, et c'est load-bearing  │
+     * └───────────────────────────────────────────────────────────────────┘
+     *
+     * `distinctUntilChanged()` sur le seul terme a produit un défaut signalé
+     * en usage réel : taper « Bambilor » avec le pays sur France (aucun
+     * résultat), corriger le pays en Sénégal, retaper « Bambilor » — et
+     * toujours rien. Le terme étant IDENTIQUE au précédent, l'opérateur
+     * l'écartait ; aucune requête ne partait, la liste restait vide, et
+     * l'utilisateur voyait une ville pourtant connue du référentiel lui être
+     * refusée.
+     *
+     * Le même mot sous un autre pays est une AUTRE question : la clé de
+     * comparaison doit donc porter les deux.
      */
     this.saisieVille$.pipe(
       debounceTime(250),
-      distinctUntilChanged(),
-      switchMap(terme => this.villes.rechercher(terme)),
+      /*
+       * Le pays du FORMULAIRE borne les suggestions, et non celui du compte :
+       * sans pays « Dakar » proposerait ses homonymes de Syrie et d'Inde, et
+       * avec le pays du compte un Français en déplacement ne trouverait
+       * jamais Dakar. C'est le champ juste au-dessus qui commande.
+       */
+      map(terme => [terme, this.formulaire.controls.pays.value] as const),
+      distinctUntilChanged((a, b) => a[0] === b[0] && a[1] === b[1]),
+      switchMap(([terme, pays]) => this.villes.rechercher(terme, pays || undefined)),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe(resultats => {
       this.suggestions.set(resultats);
@@ -440,16 +414,21 @@ export class SeanceFormulaireComponent implements OnInit {
      */
     combineLatest([
       this.formulaire.controls.ville.valueChanges.pipe(startWith(this.formulaire.controls.ville.value)),
-      this.formulaire.controls.dateHeure.valueChanges.pipe(startWith(this.formulaire.controls.dateHeure.value))
+      this.formulaire.controls.dateHeure.valueChanges.pipe(startWith(this.formulaire.controls.dateHeure.value)),
+      // Le PAYS entre dans le combineLatest : changer de pays sans changer de
+      // ville désigne un autre lieu (Saint-Louis au Sénégal ou dans le
+      // Missouri). Laissé dehors, l'aperçu restait celui du pays précédent.
+      this.formulaire.controls.pays.valueChanges.pipe(startWith(this.formulaire.controls.pays.value))
     ]).pipe(
       debounceTime(400),
-      distinctUntilChanged((a, b) => a[0] === b[0] && a[1] === b[1]),
-      tap(([ville, dateHeure]) => this.meteoEnCours.set(!!ville?.trim() && !!dateHeure)),
-      switchMap(([ville, dateHeure]) => {
-        if (!ville?.trim() || !dateHeure) {
+      distinctUntilChanged((a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2]),
+      tap(([ville, dateHeure]) => this.meteoEnCours.set(!!nomDeVille(ville).trim() && !!dateHeure)),
+      switchMap(([villeBrute, dateHeure, pays]) => {
+        const ville = nomDeVille(villeBrute).trim();
+        if (!ville || !dateHeure) {
           return of(null);
         }
-        return this.meteo.conditions(ville.trim(), dateHeure);
+        return this.meteo.conditions(ville, dateHeure, pays || undefined);
       }),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe(conditions => {
@@ -458,15 +437,134 @@ export class SeanceFormulaireComponent implements OnInit {
     });
 
     if (this.id) {
+      /*
+       * ⚠️ La contrainte est levée en MODIFICATION, et ce n'est pas un
+       * relâchement de la règle : l'écran d'édition n'affiche pas le champ
+       * ville (@if (!estModification()) dans le gabarit) et `chargerSeance`
+       * ne le renseigne pas. Le contrôle resterait donc vide, le formulaire
+       * définitivement invalide, et la séance impossible à corriger — sur un
+       * champ que l'utilisateur ne voit même pas.
+       */
+      this.formulaire.controls.ville.removeValidators(villeRequise);
+      this.formulaire.controls.ville.updateValueAndValidity();
+      this.formulaire.controls.pays.removeValidators(Validators.required);
+      this.formulaire.controls.pays.updateValueAndValidity();
       this.chargerSeance(Number(this.id));
     } else {
       // Ville de référence du profil : l'aperçu météo est disponible
       // immédiatement, sans que l'utilisateur ait à saisir un lieu.
+      this.brancherVerificationDeVille();
+
       this.formulaire.patchValue({
         dateHeure: maintenantLocalISO(),
+        pays: this.auth.pays(),
         ville: this.auth.villeParDefaut()
       });
+      this.brancherDefautsParType();
     }
+  }
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ PRÉ-REMPLISSAGE PAR TYPE — et pourquoi il ne piétine jamais la saisie │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Le pré-remplissage n'est appliqué qu'à un champ resté PRISTINE, c'est-à-dire
+   * jamais modifié par l'utilisateur. Écraser systématiquement à chaque
+   * changement de type effacerait une distance saisie à la main dès qu'on
+   * corrige le type — le raccourci deviendrait un piège.
+   *
+   * `patchValue` ne salit PAS le contrôle (contrairement à une saisie clavier) :
+   * un pré-remplissage reste donc « propre », et plusieurs changements de type
+   * successifs continuent de fonctionner tant que l'utilisateur n'a rien tapé.
+   *
+   * En MODIFICATION, la méthode n'est pas branchée du tout : une séance
+   * existante porte ses propres valeurs, qu'aucun défaut ne doit remplacer.
+   */
+  /**
+   * Vérifie que la ville saisie EXISTE dans le pays choisi.
+   *
+   * Branché à la création seulement : l'écran de modification n'affiche pas le
+   * lieu, il n'y aurait rien à vérifier ni à corriger.
+   *
+   * ⚠️ `existe()` rend `null` quand le service ne répond pas — et l'indécision
+   * vaut ACCEPTATION. Une panne du géocodeur ne doit pas se transformer en
+   * erreur de saisie : on préfère laisser passer une ville douteuse plutôt que
+   * de retenir en otage une saisie correcte.
+   */
+  private brancherVerificationDeVille(): void {
+    combineLatest([
+      this.formulaire.controls.ville.valueChanges.pipe(startWith(this.formulaire.controls.ville.value)),
+      this.formulaire.controls.pays.valueChanges.pipe(startWith(this.formulaire.controls.pays.value))
+    ]).pipe(
+      map(([ville, pays]) => [nomDeVille(ville).trim(), (pays ?? '').trim()] as const),
+      distinctUntilChanged((a, b) => a[0] === b[0] && a[1] === b[1]),
+      tap(() => this.villeInconnue.set(false)),
+      debounceTime(400),
+      tap(([ville, pays]) => this.villeEnVerification.set(!!ville && !!pays)),
+      switchMap(([ville, pays]) => {
+        // Champ vide ou pays pas encore choisi : `villeRequise` et le `required`
+        // du pays s'en chargent. Deux messages pour une seule cause n'en valent
+        // aucun.
+        if (!ville || !pays) {
+          return of(null);
+        }
+        return this.villes.existe(ville, pays);
+      }),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe(existe => {
+      this.villeEnVerification.set(false);
+      this.villeInconnue.set(existe === false);
+    });
+  }
+
+  private brancherDefautsParType(): void {
+    this.formulaire.controls.type.valueChanges
+      .pipe(startWith(this.formulaire.controls.type.value), takeUntilDestroyed(this.destroyRef))
+      .subscribe(type => this.appliquerDefauts(type));
+
+    // Les préférences arrivent par le réseau : elles peuvent être en retard sur
+    // l'ouverture de l'écran. On réapplique à leur arrivée, toujours sous la
+    // même condition de champ vierge.
+    effect(() => {
+      this.preferences.defautsParType();
+      this.appliquerDefauts(this.formulaire.controls.type.value);
+    }, { injector: this.injecteur, allowSignalWrites: true });
+  }
+
+  private appliquerDefauts(type: TypeSeance): void {
+    const defaut = this.preferences.defautsParType().get(type);
+    if (!defaut) {
+      return;
+    }
+    const { distanceKm, dureeMinutes } = this.formulaire.controls;
+    if (distanceKm.pristine) {
+      distanceKm.setValue(defaut.distanceKm);
+    }
+    if (dureeMinutes.pristine) {
+      dureeMinutes.setValue(defaut.dureeMinutes);
+    }
+  }
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ Changer de pays vide la ville — sur l'ÉVÉNEMENT, pas sur valueChanges │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Même raisonnement que pour l'autocomplétion juste au-dessus : `onChange`
+   * n'existe que si l'utilisateur agit, là où `valueChanges` se déclencherait
+   * aussi au pré-remplissage — ce qui effacerait la ville du profil à
+   * l'ouverture de l'écran, sur un formulaire que personne n'a touché.
+   *
+   * Une ville appartient à son pays : « Lille » gardé après un passage au
+   * Sénégal ne désigne plus rien, et l'aperçu météo reviendrait vide sans
+   * qu'on comprenne pourquoi.
+   */
+  protected changerPays(): void {
+    this.formulaire.controls.ville.setValue('');
+    this.formulaire.controls.ville.markAsPristine();
+    this.suggestions.set([]);
+    this.indexActif.set(-1);
   }
 
   protected choisir(suggestion: SuggestionVille): void {
@@ -537,17 +635,24 @@ export class SeanceFormulaireComponent implements OnInit {
       return;
     }
 
+    const valeurs = this.formulaire.getRawValue();
+    // Inatteignable : Validators.required a déjà rendu le formulaire invalide.
+    // Le test est là pour que le typage reflète cette garantie sans `!`.
+    if (valeurs.distanceKm === null || valeurs.dureeMinutes === null) {
+      return;
+    }
+
     this.envoiEnCours.set(true);
     this.refus.set(null);
 
-    const valeurs = this.formulaire.getRawValue();
     const requete = {
       type: valeurs.type,
       distanceKm: valeurs.distanceKm,
       dureeMinutes: valeurs.dureeMinutes,
       dateHeure: valeurs.dateHeure,
       commentaire: valeurs.commentaire || null,
-      ville: valeurs.ville || null
+      ville: nomDeVille(valeurs.ville).trim() || null,
+      pays: (valeurs.pays ?? '').trim() || null
     };
 
     const appel = this.id

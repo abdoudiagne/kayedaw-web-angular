@@ -70,4 +70,15 @@ export class SeanceService {
     const params = new HttpParams().set('debut', debut).set('fin', fin);
     return this.http.get<Statistiques>(`${this.base}/statistiques`, { params });
   }
+
+  /**
+   * Export PDF du carnet complet.
+   *
+   * `responseType: 'blob'` : sans cela `HttpClient` tente de lire la réponse
+   * en JSON et échoue sur le premier octet du PDF, avec une erreur d'analyse
+   * qui ne dit rien du vrai problème.
+   */
+  exporterPdf(): Observable<Blob> {
+    return this.http.get('/api/seances/export.pdf', { responseType: 'blob' });
+  }
 }

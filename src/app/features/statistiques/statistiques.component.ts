@@ -1,220 +1,44 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { InputTextModule } from 'primeng/inputtext';
+import { SelectButtonModule } from 'primeng/selectbutton';
+import { SkeletonModule } from 'primeng/skeleton';
 import { combineLatest, of } from 'rxjs';
-import { catchError, debounceTime, startWith, switchMap } from 'rxjs/operators';
-import { Statistiques, TypeSeance } from '../../core/models/seance.model';
+import { catchError, debounceTime, filter, startWith, switchMap } from 'rxjs/operators';
+import { libelleType, Statistiques, TypeSeance } from '../../core/models/seance.model';
 import { SeanceService } from '../../core/services/seance.service';
 import { AllurePipe } from '../../shared/pipes/allure.pipe';
 import { DureePipe } from '../../shared/pipes/duree.pipe';
 
+/**
+ * ⚠️ PAS `toISOString()`, qui bascule en UTC.
+ *
+ * C'est le même piège que `maintenantLocalISO()` dans le formulaire de séance,
+ * qui restait ici non corrigé : passé 22 h à Paris en été, `new Date()` rendu
+ * en UTC désigne DÉJÀ le lendemain. Le raccourci « 7 jours » interrogeait donc
+ * une fenêtre décalée d'un jour, et la borne « au » excluait la séance du soir
+ * même — celle que l'utilisateur venait d'enregistrer.
+ */
+function dateLocaleISO(date: Date): string {
+  const decalage = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - decalage).toISOString().slice(0, 10);
+}
+
 @Component({
-  selector: 'app-statistiques',
-  standalone: true,
-  imports: [ReactiveFormsModule, AllurePipe, DureePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h1>Statistiques</h1>
-    <p class="silence">Ce que racontent vos sorties sur la période choisie.</p>
-
-    <div class="periode carte">
-      <!-- Raccourcis : deux dates à saisir à la main à chaque consultation
-           était le principal frein à l'usage de cet écran. -->
-      <div class="raccourcis" role="group" aria-label="Périodes prédéfinies">
-        @for (p of periodes; track p.jours) {
-          <button type="button" class="raccourci" [class.actif]="joursActifs() === p.jours"
-                  (click)="appliquerPeriode(p.jours)">{{ p.libelle }}</button>
-        }
-      </div>
-      <div class="dates">
-        <label class="etiquette" for="debut">Du</label>
-        <input id="debut" class="champ" type="date" [formControl]="debut" />
-        <label class="etiquette" for="fin">au</label>
-        <input id="fin" class="champ" type="date" [formControl]="fin" />
-      </div>
-    </div>
-
-    @if (stats(); as s) {
-      <dl class="indicateurs">
-        <div class="tuile">
-          <dt>Séances</dt><dd>{{ s.nombreSeances }}</dd>
-          @if (s.comparaison; as c) {
-            <p class="ecart">{{ c.nombreSeances }} sur la période précédente</p>
-          }
-        </div>
-        <div class="tuile">
-          <dt>Distance totale</dt><dd>{{ s.distanceTotaleKm }} <small>km</small></dd>
-          <!-- On teste explicitement le null : un @if sur la valeur seule
-               masquait une variation de 0 %, qui est pourtant une information. -->
-          @if (s.comparaison?.variationDistancePourcent !== null
-               && s.comparaison?.variationDistancePourcent !== undefined) {
-            <!-- Un chiffre seul ne dit rien : la variation lui donne un sens -->
-            <p class="ecart" [class.hausse]="variationPourcent() > 0" [class.baisse]="variationPourcent() < 0">
-              {{ variationPourcent() > 0 ? '▲' : variationPourcent() < 0 ? '▼' : '=' }}
-              {{ absolu(variationPourcent()) }} % vs période précédente
-            </p>
-          }
-        </div>
-        <div class="tuile"><dt>Temps total</dt><dd>{{ s.dureeTotaleMinutes | duree }}</dd></div>
-        <div class="tuile"><dt>Allure moyenne</dt><dd>{{ s.allureMoyenneMinParKm | allure }}</dd></div>
-      </dl>
-
-      @if (courbe(); as c) {
-        <section>
-          <h2>Évolution hebdomadaire</h2>
-          <!--
-            Graphique en SVG pur : aucune dépendance ajoutée pour une courbe
-            aussi simple. Une bibliothèque coûterait plus lourd que l'écran.
-          -->
-          <figure class="graphique">
-            <svg [attr.viewBox]="'0 0 ' + c.largeur + ' ' + c.hauteur" role="img"
-                 [attr.aria-label]="'Volume hebdomadaire, de ' + c.min + ' à ' + c.max + ' km'"
-                 preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="remplissage" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="var(--azur)" stop-opacity=".28" />
-                  <stop offset="100%" stop-color="var(--azur)" stop-opacity="0" />
-                </linearGradient>
-              </defs>
-              <!-- Ligne de base à zéro : matérialise l'origine de l'échelle -->
-              <line x1="0" [attr.y1]="c.hauteur - 12" [attr.x2]="c.largeur" [attr.y2]="c.hauteur - 12"
-                    stroke="var(--bordure)" stroke-width="1" vector-effect="non-scaling-stroke" />
-              <path [attr.d]="c.aire" fill="url(#remplissage)" />
-              <path [attr.d]="c.ligne" fill="none" stroke="var(--azur)" stroke-width="2"
-                    stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
-              @for (point of c.points; track point.x) {
-                <circle [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="var(--marine)" />
-              }
-            </svg>
-            <figcaption class="legende">
-              @for (etiquette of c.etiquettes; track etiquette) { <span>{{ etiquette }}</span> }
-            </figcaption>
-            <!-- L'échelle en clair : une courbe sans graduation n'est pas une donnée -->
-            <p class="echelle">Échelle 0 → {{ c.plafond }} km par semaine</p>
-          </figure>
-        </section>
-      }
-
-      @if (records(); as r) {
-        <section>
-          <h2>Records personnels</h2>
-          <p class="silence rappel">Calculés sur l'ensemble de vos séances réalisées.</p>
-          <dl class="records">
-            <div><dt>Plus longue sortie</dt><dd>{{ r.plusLongueDistanceKm ?? '—' }} <small>km</small></dd></div>
-            <div><dt>Plus longue durée</dt>
-              <dd>@if (r.plusLongueDuree !== null) { {{ r.plusLongueDuree | duree }} } @else { — }</dd></div>
-            <div><dt>Meilleure allure</dt>
-              <dd>@if (r.meilleureAllureMinParKm !== null) { {{ r.meilleureAllureMinParKm | allure }} } @else { — }</dd></div>
-            <div><dt>Plus grosse semaine</dt><dd>{{ r.plusGrosseSemaineKm ?? '—' }} <small>km</small></dd></div>
-            <div><dt>Séances au total</dt><dd>{{ r.nombreTotalSeances }}</dd></div>
-            <div><dt>Distance cumulée</dt><dd>{{ r.distanceCumuleeKm }} <small>km</small></dd></div>
-          </dl>
-        </section>
-      }
-
-      @if (repartition().length > 0) {
-        <section>
-          <h2>Répartition par type</h2>
-          <!-- Barres en CSS pur : pas de dépendance graphique pour si peu -->
-          <ul class="repartition">
-            @for (ligne of repartition(); track ligne.type) {
-              <li>
-                <span class="libelle">{{ ligne.type }}</span>
-                <span class="barre">
-                  <span [style.width.%]="ligne.pourcentage" [attr.data-type]="ligne.type"></span>
-                </span>
-                <span class="valeur">{{ ligne.km }} km</span>
-              </li>
-            }
-          </ul>
-        </section>
-      } @else {
-        <p class="vide">Aucune séance sur cette période.</p>
-      }
-    } @else {
-      <dl class="indicateurs" aria-busy="true">
-        @for (tuile of squelettes; track tuile) { <div class="squelette tuile-vide"></div> }
-      </dl>
-    }
-  `,
-  styles: [`
-    .periode { display: grid; gap: .9rem; margin: 1.5rem 0; padding: 1rem 1.25rem; }
-    .raccourcis { display: flex; gap: .4rem; flex-wrap: wrap; }
-    .raccourci { padding: .4rem .85rem; border: 1px solid var(--bordure); border-radius: 999px;
-                 background: transparent; color: var(--texte-doux); font: inherit;
-                 font-size: .85rem; cursor: pointer;
-                 transition: all var(--transition); }
-    .raccourci:hover { border-color: var(--azur); color: var(--azur); }
-    .raccourci.actif { background: var(--degrade-marque); color: #fff; border-color: transparent;
-                       font-weight: 600; }
-    .dates { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
-    .periode .etiquette { margin: 0; }
-    .periode .champ { width: auto; }
-
-    .indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-                   gap: 1rem; margin: 1.5rem 0; }
-    .tuile {
-      position: relative; overflow: hidden;
-      padding: 1.15rem 1.25rem; border-radius: var(--rayon);
-      background: var(--surface); border: 1px solid var(--bordure); box-shadow: var(--ombre-1);
-      transition: transform var(--transition), box-shadow var(--transition);
-    }
-    .tuile:hover { transform: translateY(-3px); box-shadow: var(--ombre-2); }
-    /* Filet dégradé en haut de tuile : la marque, sans surcharger la lecture */
-    .tuile::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
-                     background: var(--degrade-marque); }
-    .tuile-vide { height: 6.2rem; }
-    dt { font-size: .8rem; color: var(--texte-doux); }
-    dd { margin: .3rem 0 0; font-size: clamp(1.5rem, 1.2rem + .9vw, 1.9rem); font-weight: 700;
-         letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-    dd small { font-size: .95rem; font-weight: 600; color: var(--texte-doux); }
-
-    .ecart { margin: .4rem 0 0; font-size: .76rem; color: var(--texte-doux); }
-    .ecart.hausse { color: var(--succes); font-weight: 600; }
-    .ecart.baisse { color: var(--orange); font-weight: 600; }
-
-    .graphique { margin: 0; padding: 1rem 1.15rem; background: var(--surface);
-                 border: 1px solid var(--bordure); border-radius: var(--rayon);
-                 box-shadow: var(--ombre-1); }
-    .graphique svg { display: block; width: 100%; height: 10rem; }
-    .legende { display: flex; justify-content: space-between; margin-top: .5rem;
-               font-size: .75rem; color: var(--texte-doux); font-variant-numeric: tabular-nums; }
-    .echelle { margin: .35rem 0 0; font-size: .72rem; color: var(--texte-doux); }
-
-    .records { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-               gap: 1px; padding: 0; overflow: hidden; background: var(--bordure);
-               border: 1px solid var(--bordure); border-radius: var(--rayon-large);
-               box-shadow: var(--ombre-1); }
-    .records > div { padding: 1rem 1.15rem; background: var(--surface); }
-    .records dd { font-size: 1.25rem; }
-    .rappel { margin: -.25rem 0 .75rem; font-size: .82rem; }
-
-    .repartition { list-style: none; padding: 0; display: grid; gap: .7rem; }
-    .repartition li { display: grid; grid-template-columns: 9rem 1fr 5rem; align-items: center; gap: 1rem; }
-    .libelle { font-size: .85rem; }
-    .barre { height: .95rem; background: var(--surface-douce); border: 1px solid var(--bordure);
-             border-radius: 999px; overflow: hidden; }
-    /* La barre se déploie à l'affichage : la comparaison se lit d'un coup d'œil */
-    .barre > span { display: block; height: 100%; border-radius: 999px;
-                    background: var(--degrade-marque);
-                    animation: deploiement 620ms cubic-bezier(.2, .8, .3, 1); }
-    .barre > span[data-type="FRACTIONNE"] { background: var(--degrade-accent); }
-    .barre > span[data-type="RECUPERATION"] { background: linear-gradient(135deg, var(--turquoise), var(--menthe)); }
-    @keyframes deploiement { from { width: 0 !important; } }
-    .valeur { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .vide { color: var(--texte-doux); padding: 2rem 0; }
-
-    @media (max-width: 40rem) {
-      .repartition li { grid-template-columns: 7rem 1fr 4rem; gap: .6rem; }
-    }
-  `]
+    selector: 'app-statistiques',
+    imports: [ReactiveFormsModule, FormsModule, AllurePipe, DureePipe,
+      SelectButtonModule, InputTextModule, SkeletonModule],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    templateUrl: './statistiques.component.html',
+    styleUrl: './statistiques.component.scss'
 })
 export class StatistiquesComponent {
 
   private readonly service = inject(SeanceService);
 
-  private readonly ilYA30Jours = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
-  private readonly aujourdhui = new Date().toISOString().slice(0, 10);
+  private readonly ilYA30Jours = dateLocaleISO(new Date(Date.now() - 30 * 86_400_000));
+  private readonly aujourdhui = dateLocaleISO(new Date());
 
   protected readonly squelettes = [1, 2, 3, 4];
 
@@ -225,15 +49,41 @@ export class StatistiquesComponent {
     { jours: 365, libelle: '1 an' }
   ] as const;
 
+  protected readonly optionsPeriode = [
+    { jours: 7, libelle: '7 jours' }, { jours: 30, libelle: '30 jours' },
+    { jours: 90, libelle: '3 mois' }, { jours: 365, libelle: '1 an' }
+  ];
+
   protected readonly debut = new FormControl(this.ilYA30Jours, { nonNullable: true });
   protected readonly fin = new FormControl(this.aujourdhui, { nonNullable: true });
 
+  protected readonly libelleType = libelleType;
+
+  /** Les deux bornes en un seul flux : elles ne s'interprètent qu'ensemble. */
+  private readonly bornes$ = combineLatest([
+    this.debut.valueChanges.pipe(startWith(this.debut.value)),
+    this.fin.valueChanges.pipe(startWith(this.fin.value))
+  ]);
+
+  private readonly bornes = toSignal(this.bornes$, {
+    initialValue: [this.debut.value, this.fin.value] as [string, string]
+  });
+
+  /**
+   * Format `aaaa-mm-jj` : l'ordre lexicographique EST l'ordre chronologique,
+   * aucune conversion en Date n'est nécessaire — et aucun fuseau ne s'invite.
+   */
+  protected readonly periodeInvalide = computed(() => {
+    const [debut, fin] = this.bornes();
+    return !!debut && !!fin && fin < debut;
+  });
+
   protected readonly stats = toSignal<Statistiques | undefined>(
-    combineLatest([
-      this.debut.valueChanges.pipe(startWith(this.debut.value)),
-      this.fin.valueChanges.pipe(startWith(this.fin.value))
-    ]).pipe(
+    this.bornes$.pipe(
       debounceTime(300),
+      // On n'interroge pas le serveur sur une période impossible : la réponse
+      // vide serait indiscernable d'une période sans aucune séance.
+      filter(([debut, fin]) => !(debut && fin && fin < debut)),
       switchMap(([debut, fin]) =>
         this.service.statistiques(debut, fin).pipe(catchError(() => of(undefined)))
       )
@@ -261,8 +111,8 @@ export class StatistiquesComponent {
     const fin = new Date();
     const debut = new Date();
     debut.setDate(debut.getDate() - jours);
-    this.debut.setValue(debut.toISOString().slice(0, 10));
-    this.fin.setValue(fin.toISOString().slice(0, 10));
+    this.debut.setValue(dateLocaleISO(debut));
+    this.fin.setValue(dateLocaleISO(fin));
   }
 
   protected absolu(valeur: number): number {

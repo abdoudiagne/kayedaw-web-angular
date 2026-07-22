@@ -1,0 +1,79 @@
+.periode { display: grid; gap: .9rem; margin: 1.5rem 0; padding: 1rem 1.25rem; }
+.raccourcis { display: flex; gap: .4rem; flex-wrap: wrap; }
+.raccourci { padding: .4rem .85rem; border: 1px solid var(--bordure); border-radius: 999px;
+             background: transparent; color: var(--texte-doux); font: inherit;
+             font-size: .85rem; cursor: pointer;
+             transition: all var(--transition); }
+.raccourci:hover { border-color: var(--azur); color: var(--azur); }
+.raccourci.actif { background: var(--degrade-marque); color: #fff; border-color: transparent;
+                   font-weight: 600; }
+.dates { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.periode .etiquette { margin: 0; }
+.periode .champ { width: auto; }
+
+.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+               gap: 1rem; margin: 1.5rem 0; }
+.tuile {
+  position: relative; overflow: hidden;
+  padding: 1.15rem 1.25rem; border-radius: var(--rayon);
+  background: var(--surface); border: 1px solid var(--bordure); box-shadow: var(--ombre-1);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.tuile:hover { transform: translateY(-3px); box-shadow: var(--ombre-2); }
+/* Filet dégradé en haut de tuile : la marque, sans surcharger la lecture */
+.tuile::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+                 background: var(--degrade-marque); }
+.tuile-vide { height: 6.2rem; }
+dt { font-size: .8rem; color: var(--texte-doux); }
+dd { margin: .3rem 0 0; font-size: clamp(1.5rem, 1.2rem + .9vw, 1.9rem); font-weight: 700;
+     letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+dd small { font-size: .95rem; font-weight: 600; color: var(--texte-doux); }
+
+.ecart { margin: .4rem 0 0; font-size: .76rem; color: var(--texte-doux); }
+.ecart.hausse { color: var(--succes); font-weight: 600; }
+.ecart.baisse { color: var(--orange); font-weight: 600; }
+
+.graphique { margin: 0; padding: 1rem 1.15rem; background: var(--surface);
+             border: 1px solid var(--bordure); border-radius: var(--rayon);
+             box-shadow: var(--ombre-1); }
+/* Le viewBox mesure 600×160 : on impose le même rapport au conteneur pour
+   que le tracé garde sa géométrie à toutes les largeurs. */
+.graphique svg { display: block; width: 100%; height: auto; aspect-ratio: 600 / 160; }
+.legende { display: flex; justify-content: space-between; margin-top: .5rem;
+           font-size: .75rem; color: var(--texte-doux); font-variant-numeric: tabular-nums; }
+.echelle { margin: .35rem 0 0; font-size: .72rem; color: var(--texte-doux); }
+
+.records { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+           gap: 1px; padding: 0; overflow: hidden; background: var(--bordure);
+           border: 1px solid var(--bordure); border-radius: var(--rayon-large);
+           box-shadow: var(--ombre-1); }
+.records > div { padding: 1rem 1.15rem; background: var(--surface); }
+.records dd { font-size: 1.25rem; }
+.rappel { margin: -.25rem 0 .75rem; font-size: .82rem; }
+
+.repartition { list-style: none; padding: 0; display: grid; gap: .7rem; }
+.repartition li { display: grid; grid-template-columns: 9rem 1fr 5rem; align-items: center; gap: 1rem; }
+.libelle { font-size: .85rem; }
+.barre { height: .95rem; background: var(--surface-douce); border: 1px solid var(--bordure);
+         border-radius: 999px; overflow: hidden; }
+/* La barre se déploie à l'affichage : la comparaison se lit d'un coup d'œil */
+.barre > span { display: block; height: 100%; border-radius: 999px;
+                background: var(--degrade-marque);
+                animation: deploiement 620ms cubic-bezier(.2, .8, .3, 1); }
+/* Une teinte par type, les CINQ.
+   Seuls FRACTIONNE et RECUPERATION étaient distingués : ENDURANCE,
+   SORTIE_LONGUE et MARCHE partageaient le dégradé de marque, soit trois
+   barres identiques dans le graphique censé les comparer. */
+.barre > span[data-type="FRACTIONNE"] { background: var(--degrade-accent); }
+.barre > span[data-type="RECUPERATION"] { background: linear-gradient(135deg, var(--turquoise), var(--menthe)); }
+.barre > span[data-type="SORTIE_LONGUE"] { background: linear-gradient(135deg, var(--marine-fonce), var(--marine)); }
+.barre > span[data-type="MARCHE"] { background: linear-gradient(135deg, var(--texte-doux), var(--bordure)); }
+@keyframes deploiement { from { width: 0 !important; } }
+.valeur { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.valeur small { display: block; font-size: .72rem; font-weight: 500; color: var(--texte-doux); }
+.vide { color: var(--texte-doux); padding: 2rem 0; }
+.erreur-periode { margin: 0; font-size: .85rem; color: var(--danger); }
+
+@media (max-width: 40rem) {
+  .repartition li { grid-template-columns: 7rem 1fr 4rem; gap: .6rem; }
+}

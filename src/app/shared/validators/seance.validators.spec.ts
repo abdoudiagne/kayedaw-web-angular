@@ -1,5 +1,5 @@
 import { FormControl, FormGroup } from '@angular/forms';
-import { allurePlausible, dansHorizonDePlanification, HORIZON_PLANIFICATION_JOURS }
+import { allurePlausible, dansHorizonDePlanification, HORIZON_PLANIFICATION_JOURS, villeRequise }
   from './seance.validators';
 
 describe('Validateurs de séance', () => {
@@ -19,7 +19,11 @@ describe('Validateurs de séance', () => {
     });
 
     it('refuse une planification au-delà de l horizon', () => {
-      const erreur = dansHorizonDePlanification(new FormControl(dansNJours(30)));
+      // Décalage DÉRIVÉ de la constante, jamais écrit en dur : la valeur 30
+      // codée ici est devenue la borne exacte le jour où l'horizon est passé
+      // de 14 à 30 jours, et le test échouait sur son propre littéral.
+      const erreur = dansHorizonDePlanification(
+        new FormControl(dansNJours(HORIZON_PLANIFICATION_JOURS + 5)));
       expect(erreur?.['dateTropLointaine'].horizonJours).toBe(HORIZON_PLANIFICATION_JOURS);
     });
 
@@ -58,4 +62,42 @@ describe('Validateurs de séance', () => {
       expect(allurePlausible(groupe(0, 0))).toBeNull();
     });
   });
+
+  describe('villeRequise', () => {
+
+    it('accepte une ville saisie', () => {
+      expect(villeRequise(new FormControl('Lille'))).toBeNull();
+    });
+
+    it('refuse un champ vide', () => {
+      expect(villeRequise(new FormControl(''))).toEqual({ villeRequise: true });
+    });
+
+    /*
+     * LE cas qui justifie ce validateur : Validators.required laisse passer des
+     * espaces. Ils atteindraient le géocodeur, ne désigneraient aucun lieu, et
+     * la séance serait enregistrée sans météo — définitivement, puisque le
+     * champ ville n'existe pas à la modification.
+     */
+    it('refuse une saisie faite uniquement d espaces', () => {
+      expect(villeRequise(new FormControl('   '))).toEqual({ villeRequise: true });
+    });
+
+    it('refuse un contrôle nul', () => {
+      expect(villeRequise(new FormControl(null))).toEqual({ villeRequise: true });
+    });
+
+    /*
+     * p-autoComplete écrit l'OBJET suggestion dans le contrôle le temps d'un
+     * tour, avant que le composant n'y remette le nom. Le validateur doit le
+     * traverser sans lever : une exception ici laisse le formulaire dans un
+     * état incohérent, sur une valeur pourtant parfaitement valide.
+     */
+    it('traverse l objet suggestion écrit par p-autoComplete sans lever', () => {
+      const suggestion = { nom: 'Thiès', departement: null, latitude: 14.8, longitude: -16.9 };
+      expect(() => villeRequise(new FormControl(suggestion))).not.toThrow();
+      expect(villeRequise(new FormControl(suggestion))).toBeNull();
+    });
+  });
+
 });

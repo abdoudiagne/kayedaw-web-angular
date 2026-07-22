@@ -16,20 +16,41 @@ import { AuthService } from './core/services/auth.service';
  */
 export const routes: Routes = [
   /**
-   * ACCUEIL — la racine mène à la CONNEXION tant qu'on n'est pas identifié.
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ ACCUEIL PUBLIC — sans garde, et c'est un revirement assumé            │
+   * └───────────────────────────────────────────────────────────────────────┘
    *
-   * `redirectTo` accepte une FONCTION depuis Angular 18 : on décide la cible à
-   * l'exécution, en injectant un service. Avant, il fallait un guard factice ou
-   * un composant vide dont le seul rôle était de rediriger.
+   * La racine menait droit à l'écran de connexion : un visiteur devait saisir
+   * des identifiants avant même de savoir ce que fait l'application. Elle a
+   * d'abord porté une page d'accueil réservée aux VISITEURS (`invitéGuard`),
+   * qui renvoyait un compte ouvert vers l'écran de son rôle.
    *
-   * Sans cela, la racine renvoyait vers /seances, que authGuard rejetait
-   * ensuite vers /connexion : deux navigations, et une URL polluée par un
-   * paramètre `redirige` inutile.
+   * L'accueil était réservé aux visiteurs : un compte ouvert y était renvoyé
+   * Cette garde est tombée : « Accueil » figure désormais en permanence dans
+   * l'en-tête, connecté ou non, et un lien qui rebondit ailleurs est un lien
+   * MENTEUR — il annonce une destination et en livre une autre, sans jamais
+   * s'allumer en `routerLinkActive` puisque l'URL finale n'est pas la sienne.
+   *
+   * La page s'adapte donc à la session plutôt que de se fermer : ses appels à
+   * l'action deviennent ceux du rôle (voir `accueil.component.html`).
    */
   {
     path: '',
     pathMatch: 'full',
-    redirectTo: () => (inject(AuthService).estConnecte() ? '/seances' : '/connexion')
+    loadComponent: () => import('./features/accueil/accueil.component')
+      .then(m => m.AccueilComponent)
+  },
+
+  /**
+   * « À propos » : carte d'identité technique du projet, lisible connecté ou
+   * non. Sans garde, comme l'accueil — les deux liens que l'en-tête conserve
+   * en permanence mènent l'un comme l'autre à une vraie page.
+   */
+  {
+    path: 'a-propos',
+    loadComponent: () => import('./features/accueil/a-propos.component')
+      .then(m => m.AProposComponent),
+    title: 'À propos — KayeDaw'
   },
 
   {
@@ -88,5 +109,13 @@ export const routes: Routes = [
   },
 
   // Même logique pour une URL inconnue : jamais d'écran vide, jamais de boucle
-  { path: '**', redirectTo: () => (inject(AuthService).estConnecte() ? '/seances' : '/connexion') }
+  { path: '**', redirectTo: () => {
+      const auth = inject(AuthService);
+      if (!auth.estConnecte()) {
+        return '/connexion';
+      }
+      // L'administrateur atterrit sur SON écran : le carnet de séances d'un
+      // compte d'administration est vide par nature.
+      return auth.estAdmin() ? '/administration' : '/seances';
+    } }
 ];

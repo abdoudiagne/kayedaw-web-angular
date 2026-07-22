@@ -1,0 +1,412 @@
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SYSTÈME DE DESIGN KAYEDAW
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Les couleurs sont prélevées sur le logo : bleu marine, turquoise, orange.
+ * Tout est exprimé en variables CSS pour n'avoir qu'un seul endroit à modifier,
+ * et pour permettre au thème sombre de ne réécrire que les valeurs.
+ *
+ * Pourquoi des styles globaux ici alors que les composants ont leurs propres
+ * `styles` ? Parce que ces règles sont TRANSVERSES (jetons, typographie,
+ * primitives .carte / .bouton / .champ). Les styles d'un composant restent
+ * encapsulés — c'est justement ce qu'on veut pour tout le reste.
+ */
+
+:root {
+  /* Marque */
+  --marine: #0f4c81;
+  --marine-fonce: #0a3861;
+  --azur: #2b7bbf;
+  --turquoise: #14a8a0;
+  --menthe: #3fc7b4;
+  --orange: #f07e2b;
+  --orange-clair: #ff9c52;
+
+  /* Surfaces et texte */
+  --fond: #f4f7fb;
+  --surface: #ffffff;
+  --surface-douce: #f7f9fd;
+  --texte: #10243a;
+  --texte-doux: #5b6b80;
+  --bordure: #e1e8f2;
+
+  /* Sémantique */
+  --succes: #0e9f6e;
+  --danger: #d64545;
+  --alerte: #b9770e;
+
+  /**
+   * PASTILLES — fond translucide + couleur de texte.
+   *
+   * ⚠️ Les couleurs de marque brutes NE PASSENT PAS sur ces fonds :
+   * `--azur` sur son propre fond à 12 % donne 3,9:1 en clair, et `--marine`
+   * tombe à 1,5:1 en sombre (illisible). Chaque écran écrivait pourtant sa
+   * propre valeur en dur — donc figée, donc aveugle au thème.
+   * Ces jetons sont les variantes ASSOMBRIES pour le clair et ÉCLAIRCIES pour
+   * le sombre, toutes au-dessus de 4,5:1 (WCAG AA, texte < 18,66 px gras).
+   */
+  --pastille-azur-fond: rgba(43, 123, 191, .12);
+  --pastille-azur-texte: #1c5f96;
+  --pastille-marine-fond: rgba(15, 76, 129, .12);
+  --pastille-marine-texte: var(--marine);
+  --pastille-orange-fond: rgba(240, 126, 43, .14);
+  --pastille-orange-texte: #a04e10;
+  --pastille-turquoise-fond: rgba(20, 168, 160, .14);
+  --pastille-turquoise-texte: #0a6b66;
+  /* Teinte PROPRE, et non un alias de --surface-douce : celle-ci ne se
+     distingue de --fond que d'un point (#f7f9fd sur #f4f7fb). L'étiquette
+     MARCHE, seule à porter le ton neutre, disparaissait donc purement et
+     simplement sur toute section posée à même le fond de page — les quatre
+     autres types s'affichaient en pastille, elle en texte nu. */
+  --pastille-neutre-fond: #e4ebf5;
+  --pastille-neutre-texte: #4a5a70;   /* 5.9:1 sur la pastille */
+
+  /* Dégradés de marque : la signature visuelle de l'application */
+  --degrade-marque: linear-gradient(135deg, var(--marine) 0%, var(--azur) 45%, var(--turquoise) 100%);
+  --degrade-accent: linear-gradient(135deg, var(--orange) 0%, var(--orange-clair) 100%);
+
+  /* Élévations : trois niveaux, jamais plus — au-delà, tout se ressemble */
+  --ombre-1: 0 1px 2px rgba(16, 36, 58, .06), 0 1px 3px rgba(16, 36, 58, .04);
+  --ombre-2: 0 4px 12px rgba(16, 36, 58, .08), 0 2px 4px rgba(16, 36, 58, .04);
+  --ombre-3: 0 18px 40px rgba(16, 36, 58, .12), 0 6px 12px rgba(16, 36, 58, .06);
+
+  --rayon: .75rem;
+  --rayon-large: 1.25rem;
+  --transition: 180ms cubic-bezier(.2, .8, .3, 1);
+}
+
+/**
+ * ┌───────────────────────────────────────────────────────────────────────────┐
+ * │ THÈME SOMBRE — système par défaut, dérogation explicite possible          │
+ * └───────────────────────────────────────────────────────────────────────────┘
+ *
+ * Deux déclencheurs, et un seul jeu de valeurs :
+ *   1. la préférence système, SAUF si l'utilisateur a explicitement forcé clair ;
+ *   2. l'attribut `data-theme="sombre"`, posé sur <html> par PreferencesService.
+ *
+ * `:root:not([data-theme="clair"])` est ce qui rend le forçage en clair possible
+ * sur une machine réglée en sombre — sans le `:not`, la requête média gagnerait
+ * toujours et le choix « Clair » n'aurait aucun effet.
+ *
+ * Le bloc est écrit DEUX FOIS à dessein : CSS ne sait pas partager un corps de
+ * règle entre une requête média et un sélecteur d'attribut, et introduire un
+ * préprocesseur pour douze lignes coûterait plus que cette duplication. Toute
+ * modification doit être reportée dans les deux.
+ * Seules des VALEURS changent ici, jamais une règle de mise en page.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="clair"]) {
+    --fond: #071a2c;
+    --surface: #0d2439;
+    --surface-douce: #102b43;
+    --texte: #e8f0f8;
+    --texte-doux: #93a7bd;
+    --bordure: #1c3b56;
+    --ombre-1: 0 1px 2px rgba(0, 0, 0, .3);
+    --ombre-2: 0 4px 12px rgba(0, 0, 0, .35);
+    --ombre-3: 0 18px 40px rgba(0, 0, 0, .45);
+
+    /* Seule la couleur de TEXTE bascule : les fonds translucides s'adaptent
+       déjà d'eux-mêmes à la surface sombre placée dessous. Azur et marine
+       restent deux clartés distinctes, sans quoi « Endurance » et « Sortie
+       longue » deviendraient la même pastille. */
+    --pastille-azur-texte: #8ec5f0;
+    --pastille-marine-texte: #cfe3f7;
+    --pastille-orange-texte: var(--orange-clair);
+    --pastille-turquoise-texte: var(--menthe);
+    /* La teinte neutre est écrite en dur côté clair : sans cette reprise elle
+       fuirait telle quelle ici, et « Marche à pied » serait une pastille
+       BLANCHE au milieu d'une page sombre. */
+    --pastille-neutre-fond: #1e3d5a;
+    --pastille-neutre-texte: #a9bdd2;   /* 5.8:1 sur la pastille */
+  }
+}
+
+/* Second déclencheur : le choix explicite « Sombre », qui l'emporte même sur
+   une machine réglée en clair. Copie conforme du bloc ci-dessus. */
+:root[data-theme="sombre"] {
+  --fond: #071a2c;
+  --surface: #0d2439;
+  --surface-douce: #102b43;
+  --texte: #e8f0f8;
+  --texte-doux: #93a7bd;
+  --bordure: #1c3b56;
+  --ombre-1: 0 1px 2px rgba(0, 0, 0, .3);
+  --ombre-2: 0 4px 12px rgba(0, 0, 0, .35);
+  --ombre-3: 0 18px 40px rgba(0, 0, 0, .45);
+
+  --pastille-azur-texte: #8ec5f0;
+  --pastille-marine-texte: #cfe3f7;
+  --pastille-orange-texte: var(--orange-clair);
+  --pastille-turquoise-texte: var(--menthe);
+  --pastille-neutre-fond: #1e3d5a;
+  --pastille-neutre-texte: #a9bdd2;
+}
+
+/* `color-scheme` fait suivre les CONTRÔLES NATIFS — cases à cocher, listes
+   déroulantes, barres de défilement, et surtout le sélecteur de date. Sans
+   lui, le calendrier de `datetime-local` restait blanc au milieu d'une page
+   sombre : le navigateur ne devine pas le thème à partir des variables CSS. */
+:root { color-scheme: light; }
+:root[data-theme="sombre"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="clair"]) { color-scheme: dark; }
+}
+
+/* ── Widget de traduction Google ──────────────────────────────────────────
+   Il s'injecte hors de toute portée de composant : ces règles ne peuvent donc
+   vivre qu'ici. Le bandeau supérieur du widget DÉCALE <body> de 40 px avec un
+   `top` en ligne, ce qui décroche l'en-tête collant — d'où le `!important`,
+   seul moyen de reprendre la main sur un style en ligne. */
+.goog-te-banner-frame, .skiptranslate iframe { display: none !important; }
+body { top: 0 !important; }
+/* Le sélecteur du widget est piloté par programme (TraductionService) : on le
+   sort de l'écran sans `display: none`, qui empêcherait son initialisation. */
+#widget-traduction { position: absolute; left: -9999px; top: 0; }
+
+/**
+ * ┌───────────────────────────────────────────────────────────────────────────┐
+ * │ PONT ENTRE LES JETONS PRIMENG ET CEUX DE LA MARQUE                        │
+ * └───────────────────────────────────────────────────────────────────────────┘
+ *
+ * Aura définit ses propres surfaces. Sans ce pont, un champ PrimeNG en thème
+ * sombre s'affichait presque NOIR au milieu d'une carte bleu marine : deux
+ * palettes juxtaposées, ce qui se lit comme un défaut et non comme un choix.
+ *
+ * On ne réécrit pas le thème — formes, espacements et états restent ceux
+ * d'Aura. On ne remappe que les surfaces et la couleur d'accent, pour que les
+ * composants vivent dans la même famille chromatique que le reste de l'écran.
+ * Ces règles sont HORS COUCHE CSS, donc prioritaires sur la couche `primeng`
+ * déclarée dans app.config.ts — aucun !important nécessaire.
+ */
+:root {
+  --p-content-background: var(--surface);
+  --p-content-border-color: var(--bordure);
+  --p-text-color: var(--texte);
+  --p-text-muted-color: var(--texte-doux);
+  --p-form-field-background: var(--surface);
+  --p-form-field-border-color: var(--bordure);
+  --p-form-field-color: var(--texte);
+  --p-form-field-placeholder-color: var(--texte-doux);
+  --p-overlay-select-background: var(--surface);
+  --p-overlay-popover-background: var(--surface);
+  --p-overlay-modal-background: var(--surface);
+  --p-primary-color: var(--azur);
+  --p-primary-hover-color: var(--marine);
+  --p-primary-active-color: var(--marine-fonce);
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color: var(--texte);
+  background: var(--fond);
+  line-height: 1.6;
+  /* Halos colorés très diffus : de la profondeur sans image de fond à charger */
+  background-image:
+    radial-gradient(58rem 30rem at 12% -12%, rgba(20, 168, 160, .16), transparent 60%),
+    radial-gradient(46rem 26rem at 105% 0%, rgba(240, 126, 43, .12), transparent 62%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typographie fluide : la taille suit la largeur du viewport, sans palier brutal */
+h1 { font-size: clamp(1.55rem, 1.15rem + 1.4vw, 2.1rem); line-height: 1.2; margin: 0 0 .35rem;
+     letter-spacing: -.02em; font-weight: 700; }
+h2 { font-size: clamp(1.02rem, .95rem + .35vw, 1.2rem); margin: 2rem 0 .75rem;
+     letter-spacing: -.01em; font-weight: 650; }
+
+/*
+ * ⚠️ `:not([pButton])` est load-bearing.
+ *
+ * Les navigations sont des <a> portant la directive pButton — un lien reste un
+ * lien, même dessiné comme un bouton. Or les styles PrimeNG vivent dans une
+ * COUCHE CSS de priorité inférieure (voir `cssLayer` dans app.config.ts) : une
+ * règle `a { color }` hors couche les écrase toutes. Le résultat était un
+ * bouton principal en azur sur fond azur, donc parfaitement illisible.
+ */
+a:not([pButton]) { color: var(--azur); }
+
+/* La décoration de lien n'a pas de sens sur un bouton. */
+a[pButton] { text-decoration: none; }
+
+/*
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ `.pleine-largeur` — utilitaire GLOBAL, et il devait l'être              │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * Six gabarits la posaient sur leurs contrôles PrimeNG ; une seule feuille la
+ * DÉFINISSAIT, celle de la connexion, et sous `:host ::ng-deep`. Le style ne
+ * franchissait donc pas l'encapsulation de son composant : partout ailleurs
+ * l'attribut était écrit, lu par personne, et sans effet. Visible à l'œil sur
+ * /profil, où la ville de référence faisait la moitié de la largeur des champs
+ * qui l'encadrent.
+ *
+ * Elle vit ici parce qu'elle est une règle de MISE EN PAGE, pas une décision
+ * d'écran : un composant de formulaire occupe la largeur qu'on lui donne.
+ *
+ * Les sélecteurs internes sont nécessaires : PrimeNG enveloppe le champ réel
+ * dans un hôte. Élargir l'hôte sans élargir l'input laisse un champ étroit
+ * dans un conteneur large.
+ */
+.pleine-largeur { width: 100%; }
+/*
+ * ⚠️ On élargit l'INPUT réel, pas n'importe quel enfant.
+ *
+ * `.p-select-label` figurait ici et cassait le composant : ce libellé est un
+ * enfant flex à côté du chevron, lui donner 100 % de la largeur poussait le
+ * chevron à la ligne suivante et doublait la hauteur du champ. L'hôte à 100 %
+ * suffit, la mise en page interne de PrimeNG fait le reste.
+ */
+.pleine-largeur .p-inputtext,
+.pleine-largeur .p-password-input,
+.pleine-largeur .p-autocomplete-input,
+.pleine-largeur input { width: 100%; }
+/* p-autoComplete et p-inputnumber posent un hôte inline-flex qui ne suit pas
+   la largeur du parent sans cela. */
+p-autocomplete.pleine-largeur,
+p-inputnumber.pleine-largeur { display: block; }
+
+/* ── Primitives réutilisées par les écrans ───────────────────────────────── */
+
+.carte {
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon-large);
+  box-shadow: var(--ombre-1);
+}
+
+.bouton {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .7rem 1.25rem;
+  border: 0; border-radius: .65rem;
+  background: var(--degrade-marque);
+  color: #fff; font: inherit; font-weight: 600; text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--ombre-2);
+  transition: transform var(--transition), box-shadow var(--transition), filter var(--transition);
+}
+.bouton:hover { transform: translateY(-2px); box-shadow: var(--ombre-3); filter: saturate(1.1); }
+.bouton:active { transform: translateY(0); }
+.bouton:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: var(--ombre-1); }
+
+.bouton.fantome {
+  background: var(--surface); color: var(--texte);
+  border: 1px solid var(--bordure); box-shadow: var(--ombre-1);
+}
+.bouton.fantome:hover { border-color: var(--azur); color: var(--azur); }
+
+.champ {
+  width: 100%;
+  padding: .7rem .85rem;
+  border: 1px solid var(--bordure);
+  border-radius: .65rem;
+  background: var(--surface);
+  color: var(--texte);
+  font: inherit;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.champ:hover { border-color: #c6d4e6; }
+.champ:focus {
+  outline: none;
+  border-color: var(--azur);
+  /* Anneau de focus coloré : plus lisible qu'un simple changement de bordure */
+  box-shadow: 0 0 0 4px rgba(43, 123, 191, .18);
+}
+
+.etiquette { font-weight: 600; font-size: .88rem; margin-top: .9rem; }
+
+/* Astérisque des champs obligatoires, rendu en CSS et NON dans le texte.
+   Raison : Chromium inclut le texte d'un <span aria-hidden> dans le nom
+   accessible du label (« Mot de passe * »), ce qui pollue l'annonce d'un
+   lecteur d'écran ET casse les sélecteurs getByLabel. En ::after, l'astérisque
+   n'existe que visuellement — l'obligation est portée par `aria-required` sur
+   le champ, seul signal correct pour les technologies d'assistance. */
+.etiquette.requis::after {
+  content: '*'; color: var(--danger); margin-left: .2rem; font-weight: 700;
+}
+/* La légende garde un astérisque décoratif accordé au style des labels. */
+.legende-requis { margin: -.4rem 0 1rem; font-size: .78rem; color: var(--texte-doux); }
+.legende-requis .obligatoire { color: var(--danger); font-weight: 700; margin-right: .1rem; }
+
+.silence { color: var(--texte-doux); }
+
+/**
+ * PASTILLE DE TYPE DE SÉANCE — définie ici, et pas dans chaque écran.
+ *
+ * La liste, le détail et l'administration redéclaraient chacun leur bloc de
+ * couleurs : le même objet métier avait TROIS apparences, l'administration
+ * n'avait aucune couleur du tout, et `MARCHE` — ajouté au modèle après coup —
+ * n'était nulle part. Un type de séance est une notion transverse : sa
+ * traduction visuelle appartient au système, pas aux écrans.
+ */
+.etiquette-type, .etiquette-role {
+  display: inline-block; padding: .28rem .6rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+  background: var(--pastille-neutre-fond); color: var(--pastille-neutre-texte);
+}
+.etiquette-type[data-type="ENDURANCE"] {
+  background: var(--pastille-azur-fond); color: var(--pastille-azur-texte); }
+.etiquette-type[data-type="FRACTIONNE"] {
+  background: var(--pastille-orange-fond); color: var(--pastille-orange-texte); }
+.etiquette-type[data-type="SORTIE_LONGUE"] {
+  background: var(--pastille-marine-fond); color: var(--pastille-marine-texte); }
+.etiquette-type[data-type="RECUPERATION"] {
+  background: var(--pastille-turquoise-fond); color: var(--pastille-turquoise-texte); }
+/* MARCHE garde le ton neutre À DESSEIN : c'est le seul type non couru, et la
+   palette de marque n'offre pas de cinquième teinte qui reste distincte des
+   quatre autres. Un gris le sépare des séances de course au lieu d'inventer
+   une couleur qui se confondrait avec la récupération. */
+
+.etiquette-role[data-role="ADMIN"] {
+  background: var(--pastille-orange-fond); color: var(--pastille-orange-texte); }
+
+/* Squelette de chargement : l'utilisateur voit la FORME de ce qui arrive,
+   ce qui est perçu comme plus rapide qu'un simple texte « Chargement… ». */
+.squelette {
+  border-radius: .65rem;
+  background: linear-gradient(90deg, var(--surface-douce) 25%, var(--bordure) 37%, var(--surface-douce) 63%);
+  background-size: 400% 100%;
+  animation: chatoiement 1.4s ease-in-out infinite;
+}
+@keyframes chatoiement { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* Apparition douce, réutilisée à l'entrée des écrans et des listes */
+@keyframes apparition {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Réservé aux lecteurs d'écran */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* Accessibilité : la mise au point clavier doit toujours être visible.
+   `:focus-visible` ne cible que la navigation clavier, pas le clic souris. */
+:focus-visible { outline: 2px solid var(--azur); outline-offset: 3px; border-radius: 4px; }
+
+/* Écran d'attente avant l'amorçage d'Angular (voir index.html) */
+.amorcage {
+  display: grid; place-content: center; justify-items: center; gap: .75rem;
+  min-height: 100vh; color: var(--texte-doux); font-weight: 600; letter-spacing: .08em;
+}
+.amorcage img { animation: pulsation 1.4s ease-in-out infinite; }
+@keyframes pulsation { 50% { opacity: .35; transform: scale(.94); } }
+
+/* Respect des préférences système de réduction des animations.
+   Non négociable : une animation peut déclencher un malaise vestibulaire. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

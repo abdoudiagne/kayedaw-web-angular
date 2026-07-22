@@ -17,6 +17,19 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+
+  /*
+   * Les tests créent un compte chacun pour rester indépendants ; ce script les
+   * efface à la fin, sans quoi l'écran d'administration se remplit de « Compte
+   * E2E » au fil des exécutions. Il ne vise que le domaine @exemple.fr.
+   */
+  /*
+     Contrôle des prérequis AVANT la première ligne de test : un compte de
+     démonstration inutilisable produisait vingt-cinq échecs identiques et
+     muets sur leur cause. Un message vaut mieux que vingt-cinq symptômes.
+   */
+  globalSetup: './e2e/prerequis.ts',
+  globalTeardown: './e2e/nettoyage.ts',
   // Un parcours complet est plus lent qu'un test unitaire : on laisse de l'air
   timeout: 45_000,
   expect: { timeout: 10_000 },

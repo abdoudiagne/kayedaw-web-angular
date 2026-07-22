@@ -1,11 +1,30 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { of } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, filter, map, switchMap, tap } from 'rxjs/operators';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { LIBELLES_ROLE, Role } from '../../core/models/auth.model';
+import { LANGUES, Langue, Preferences, THEMES, Theme } from '../../core/models/preferences.model';
 import { Profil } from '../../core/models/profil.model';
+import { libelleType, TypeSeance } from '../../core/models/seance.model';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { PreferencesService } from '../../core/services/preferences.service';
 import { ProfilService } from '../../core/services/profil.service';
+import { VilleService } from '../../core/services/ville.service';
+import { SuggestionVille } from '../../core/models/seance.model';
+import { Pays, PaysService } from '../../core/services/pays.service';
+import { ButtonModule } from 'primeng/button';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { InputTextModule } from 'primeng/inputtext';
+import { PasswordModule } from 'primeng/password';
+import { RadioButtonModule } from 'primeng/radiobutton';
+import { AutoCompleteModule } from 'primeng/autocomplete';
+import { SelectModule } from 'primeng/select';
+import { SkeletonModule } from 'primeng/skeleton';
+import { TagModule } from 'primeng/tag';
 
 /**
  * ┌─────────────────────────────────────────────────────────────────────────┐
@@ -18,138 +37,28 @@ import { ProfilService } from '../../core/services/profil.service';
  * les deux obligerait à démêler quel champ a échoué à chaque soumission.
  */
 @Component({
-  selector: 'app-profil',
-  standalone: true,
-  imports: [ReactiveFormsModule, DatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h1>Mon profil</h1>
-    <p class="silence">Vos informations de compte et votre activité.</p>
-
-    @if (profil(); as p) {
-      <section class="entete carte">
-        <span class="avatar">{{ auth.initiales() }}</span>
-        <div class="identite">
-          <strong>{{ p.nom }}</strong>
-          <span class="silence">{{ p.email }}</span>
-        </div>
-        <span class="role" [attr.data-role]="p.role">{{ p.role }}</span>
-      </section>
-
-      <dl class="chiffres">
-        <div class="tuile"><dt>Séances réalisées</dt><dd>{{ p.nombreSeances }}</dd></div>
-        <div class="tuile"><dt>Distance cumulée</dt><dd>{{ p.distanceTotaleKm }} <small>km</small></dd></div>
-        <div class="tuile"><dt>Ville de référence</dt><dd class="ville">{{ p.villeParDefaut }}</dd></div>
-        <div class="tuile">
-          <dt>Depuis</dt>
-          <dd>
-            @if (p.premiereSeance) { {{ p.premiereSeance | date:'MMMM y' }} }
-            @else { <span class="silence">aucune séance</span> }
-          </dd>
-        </div>
-      </dl>
-
-      <section class="carte bloc">
-        <h2>Informations</h2>
-        <form [formGroup]="formulaireNom" (ngSubmit)="enregistrerProfil()">
-          <label class="etiquette requis" for="nom">Nom</label>
-          <input id="nom" aria-required="true" class="champ" type="text" formControlName="nom" autocomplete="name" />
-          @if (formulaireNom.controls.nom.invalid && formulaireNom.controls.nom.touched) {
-            <p class="erreur">Le nom est obligatoire.</p>
-          }
-
-          <label class="etiquette requis" for="ville">Ville de référence</label>
-          <input id="ville" aria-required="true" class="champ" type="text" formControlName="villeParDefaut" />
-          @if (formulaireNom.controls.villeParDefaut.invalid
-               && formulaireNom.controls.villeParDefaut.touched) {
-            <p class="erreur">La ville est obligatoire.</p>
-          }
-          <p class="aide">
-            Elle pré-remplit vos nouvelles séances et permet d'afficher la météo
-            prévue dès que vous choisissez une date, avant même d'enregistrer.
-          </p>
-
-          <button type="submit" class="bouton" [disabled]="nomEnCours() || formulaireNom.pristine">
-            {{ nomEnCours() ? 'Enregistrement…' : 'Enregistrer' }}
-          </button>
-        </form>
-      </section>
-
-      <section class="carte bloc">
-        <h2>Mot de passe</h2>
-        <form [formGroup]="formulaireMdp" (ngSubmit)="changerMotDePasse()">
-          <label class="etiquette requis" for="actuel">Mot de passe actuel</label>
-          <input id="actuel" aria-required="true" class="champ" type="password" formControlName="motDePasseActuel"
-                 autocomplete="current-password" />
-
-          <label class="etiquette requis" for="nouveau">Nouveau mot de passe</label>
-          <input id="nouveau" aria-required="true" class="champ" type="password" formControlName="nouveauMotDePasse"
-                 autocomplete="new-password" />
-          @if (formulaireMdp.controls.nouveauMotDePasse.hasError('minlength')
-               && formulaireMdp.controls.nouveauMotDePasse.touched) {
-            <p class="erreur">8 caractères minimum.</p>
-          }
-
-          <p class="aide">
-            Le mot de passe actuel est exigé : sans lui, un jeton volé permettrait
-            de vous verrouiller hors de votre propre compte.
-          </p>
-
-          <button type="submit" class="bouton" [disabled]="mdpEnCours()">
-            {{ mdpEnCours() ? 'Changement…' : 'Changer le mot de passe' }}
-          </button>
-
-          @if (erreurMdp(); as message) {
-            <p class="erreur globale" role="alert">{{ message }}</p>
-          }
-        </form>
-      </section>
-    } @else {
-      <div class="squelette bloc-attente"></div>
-    }
-  `,
-  styles: [`
-    .entete { display: flex; align-items: center; gap: 1rem; padding: 1.25rem;
-              margin: 1.5rem 0; }
-    .avatar { display: grid; place-items: center; width: 3.25rem; height: 3.25rem;
-              border-radius: 50%; background: var(--degrade-marque); color: #fff;
-              font-weight: 700; box-shadow: var(--ombre-2); }
-    .identite { display: grid; margin-right: auto; }
-    .identite strong { font-size: 1.1rem; }
-    .role { padding: .28rem .7rem; border-radius: 999px; font-size: .72rem; font-weight: 700;
-            background: var(--surface-douce); color: var(--texte-doux); }
-    .role[data-role="ADMIN"] { background: rgba(240, 126, 43, .14); color: #c05f16; }
-
-    .chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-                gap: 1rem; margin: 1.5rem 0 2rem; }
-    .tuile { position: relative; overflow: hidden; padding: 1.15rem 1.25rem;
-             border-radius: var(--rayon); background: var(--surface);
-             border: 1px solid var(--bordure); box-shadow: var(--ombre-1); }
-    .tuile::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
-                     background: var(--degrade-marque); }
-    dt { font-size: .8rem; color: var(--texte-doux); }
-    dd { margin: .3rem 0 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em;
-         font-variant-numeric: tabular-nums; text-transform: capitalize; }
-    dd small { font-size: .9rem; color: var(--texte-doux); }
-
-    .bloc { padding: clamp(1.25rem, 3vw, 1.75rem); margin-bottom: 1.25rem; max-width: 34rem; }
-    .bloc h2 { margin: 0 0 .75rem; }
-    form { display: grid; gap: .3rem; }
-    .bouton { justify-self: start; margin-top: 1.25rem; }
-    .erreur { color: var(--danger); font-size: .85rem; margin: .2rem 0 0; }
-    .erreur.globale { margin-top: 1rem; padding: .7rem .9rem; border-radius: .6rem;
-                      background: color-mix(in srgb, var(--danger) 10%, transparent); }
-    .aide { color: var(--texte-doux); font-size: .8rem; margin: .75rem 0 0; }
-    .bloc-attente { height: 12rem; margin-top: 1.5rem; }
-    dd.ville { font-size: 1.2rem; }
-  `]
+    selector: 'app-profil',
+    imports: [ReactiveFormsModule, DatePipe, InputTextModule, PasswordModule, ButtonModule,
+      InputNumberModule, SelectModule, RadioButtonModule, SkeletonModule, TagModule,
+      AutoCompleteModule],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    templateUrl: './profil.component.html',
+    styleUrl: './profil.component.scss'
 })
 export class ProfilComponent implements OnInit {
 
   private readonly fb = inject(FormBuilder);
+  private readonly villes = inject(VilleService);
   private readonly service = inject(ProfilService);
+  private readonly preferences = inject(PreferencesService);
+  private readonly referentiel = inject(PaysService);
   private readonly notifications = inject(NotificationService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly auth = inject(AuthService);
+
+  protected libelleRole(role: Role): string {
+    return LIBELLES_ROLE[role];
+  }
 
   protected readonly profil = signal<Profil | undefined>(undefined);
   protected readonly nomEnCours = signal(false);
@@ -158,23 +67,139 @@ export class ProfilComponent implements OnInit {
 
   protected readonly formulaireNom = this.fb.nonNullable.group({
     nom: ['', [Validators.required, Validators.maxLength(100)]],
-    villeParDefaut: ['', [Validators.required, Validators.maxLength(100)]]
+    villeParDefaut: ['', [Validators.required, Validators.maxLength(100)]],
+    pays: ['France', [Validators.required, Validators.maxLength(100)]]
   });
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ La ville de référence s'autocomplète, sous le pays choisi juste avant │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * C'était une saisie libre : une faute de frappe ou une commune inconnue du
+   * géocodeur passait sans broncher, et se payait plus tard — chaque séance
+   * pré-remplie avec cette ville revenait sans météo, sans que rien ne relie
+   * la panne au champ fautif.
+   *
+   * Les suggestions sont bornées par le PAYS du formulaire, d'où l'ordre à
+   * l'écran : le pays commande la liste, il vient donc avant.
+   */
+  protected readonly suggestionsVilles = signal<SuggestionVille[]>([]);
+
+  protected rechercherVille(terme: string): void {
+    this.villes.rechercher(terme, this.formulaireNom.controls.pays.value)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(resultats => this.suggestionsVilles.set([...resultats]));
+  }
+
+  /**
+   * ⚠️ Le contrôle porte une CHAÎNE, pas l'objet suggestion : l'API attend un
+   * nom de ville. Sans ce réécrivain, `[object Object]` partait au serveur.
+   */
+  protected choisirVille(suggestion: SuggestionVille): void {
+    this.formulaireNom.controls.villeParDefaut.setValue(suggestion.nom);
+    this.formulaireNom.controls.villeParDefaut.markAsDirty();
+    this.suggestionsVilles.set([]);
+  }
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ Changer de pays VIDE la ville — règle unique à tout le site           │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Une ville appartient à son pays : « Lille » conservé après un passage au
+   * Sénégal ne désigne plus rien, et la garder produirait une adresse de
+   * référence sans lieu réel — donc des séances pré-remplies qui reviennent
+   * sans météo, sans que rien ne relie la panne au champ fautif.
+   *
+   * ⚠️ Branché sur `onChange`, JAMAIS sur `valueChanges` : le second se
+   * déclenche aussi au chargement du profil, ce qui effacerait la ville d'un
+   * formulaire que personne n'a touché.
+   *
+   * L'impasse muette redoutée n'en est pas une : `enregistrerProfil` appelle
+   * `markAllAsTouched` sur un formulaire invalide, et le message « La ville
+   * est obligatoire » s'affiche sous le champ. « Annuler » rétablit d'ailleurs
+   * la valeur du serveur en un clic.
+   */
+  protected changerPays(): void {
+    this.formulaireNom.controls.villeParDefaut.setValue('');
+    this.suggestionsVilles.set([]);
+  }
 
   protected readonly formulaireMdp = this.fb.nonNullable.group({
     motDePasseActuel: ['', [Validators.required]],
-    nouveauMotDePasse: ['', [Validators.required, Validators.minLength(8)]]
+    nouveauMotDePasse: ['', [Validators.required, Validators.minLength(5)]]
+  });
+
+  /** Copie mutable : p-select refuse un tableau readonly. */
+  protected readonly pays = toSignal(
+    this.referentiel.tous().pipe(map(liste => [...liste])),
+    { initialValue: [] as Pays[] }
+  );
+
+  protected readonly themes = THEMES;
+  protected readonly langues = LANGUES;
+  protected readonly optionsLangue = [...LANGUES];
+  protected readonly libelleType = libelleType;
+  /** Retour discret de l'enregistrement automatique, à la place d'un bouton. */
+  protected readonly etatEnregistrement =
+    signal<'inactif' | 'encours' | 'ok' | 'erreur'>('inactif');
+
+  /** Trois états explicites, comme dans administration.component.ts : sans eux,
+      « en cours de chargement » et « échec » sont indiscernables à l'écran. */
+  protected readonly etatPreferences = signal<'chargement' | 'pret' | 'erreur'>('chargement');
+
+  /**
+   * Le tableau des types est construit à la RÉPONSE du serveur, pas en dur :
+   * c'est lui qui décide de la liste et de son ordre, y compris pour un type
+   * ajouté côté serveur avant de l'être ici.
+   */
+  protected readonly formulairePreferences = this.fb.nonNullable.group({
+    theme: this.fb.nonNullable.control<Theme>('SYSTEME'),
+    langue: this.fb.nonNullable.control<Langue>('FR'),
+    seances: this.fb.array<FormGroup<{
+      type: FormControl<TypeSeance>;
+      distanceKm: FormControl<number>;
+      dureeMinutes: FormControl<number>;
+    }>>([])
   });
 
   ngOnInit(): void {
+    this.chargerPreferences();
+
     this.service.profil().subscribe({
       next: (p) => {
         this.profil.set(p);
-        this.formulaireNom.patchValue({ nom: p.nom, villeParDefaut: p.villeParDefaut });
+        this.formulaireNom.patchValue({
+          nom: p.nom, villeParDefaut: p.villeParDefaut, pays: p.pays
+        });
         this.formulaireNom.markAsPristine();
       },
       error: () => this.notifications.erreur('Profil indisponible.')
     });
+  }
+
+  /**
+   * Rétablit les valeurs du SERVEUR, et non un formulaire vide : on annule ses
+   * modifications, on n'efface pas son identité. `profil()` porte la dernière
+   * réponse connue, celle-là même qui a rempli le formulaire à l'ouverture.
+   *
+   * `markAsPristine` referme la boucle : le bouton « Annuler » disparaît et
+   * « Enregistrer » se désactive, puisqu'il n'y a plus rien à enregistrer.
+   */
+  protected annulerProfil(): void {
+    const courant = this.profil();
+    if (!courant) {
+      return;
+    }
+    this.formulaireNom.patchValue({
+      nom: courant.nom,
+      villeParDefaut: courant.villeParDefaut,
+      pays: courant.pays
+    });
+    this.suggestionsVilles.set([]);
+    this.formulaireNom.markAsPristine();
+    this.formulaireNom.markAsUntouched();
   }
 
   protected enregistrerProfil(): void {
@@ -184,8 +209,8 @@ export class ProfilComponent implements OnInit {
     }
 
     this.nomEnCours.set(true);
-    const { nom, villeParDefaut } = this.formulaireNom.getRawValue();
-    this.service.modifierProfil(nom, villeParDefaut).subscribe({
+    const { nom, villeParDefaut, pays } = this.formulaireNom.getRawValue();
+    this.service.modifierProfil(nom, villeParDefaut, pays).subscribe({
       next: (p) => {
         this.profil.set(p);
         this.formulaireNom.markAsPristine();
@@ -195,9 +220,98 @@ export class ProfilComponent implements OnInit {
         // pré-remplit la ville : on rafraîchit la session locale.
         this.auth.rafraichirProfil(p.nom, p.villeParDefaut);
       },
-      error: () => {
+      error: (erreur: HttpErrorResponse) => {
         this.nomEnCours.set(false);
-        this.notifications.erreur('Enregistrement impossible.');
+        // Même principe qu'à l'inscription : le serveur nomme le champ fautif,
+        // le taire obligerait l'utilisateur à deviner.
+        const detail = (erreur.error as { message?: string } | null)?.message;
+        this.notifications.erreur(detail ?? 'Enregistrement impossible.');
+      }
+    });
+  }
+
+  protected chargerPreferences(): void {
+    this.etatPreferences.set('chargement');
+    this.preferences.charger().subscribe(preferences => {
+      if (preferences) {
+        this.remplirPreferences(preferences);
+      } else {
+        // `charger()` absorbe ses erreurs — c'est voulu ailleurs dans
+        // l'application — mais ICI l'utilisateur est venu pour ces réglages :
+        // un squelette éternel serait pire qu'un message.
+        this.etatPreferences.set('erreur');
+      }
+    });
+  }
+
+  private remplirPreferences(preferences: Preferences): void {
+    const lignes = this.formulairePreferences.controls.seances;
+    lignes.clear();
+    for (const defaut of preferences.seances) {
+      lignes.push(this.fb.nonNullable.group({
+        type: this.fb.nonNullable.control(defaut.type),
+        distanceKm: this.fb.nonNullable.control(defaut.distanceKm,
+          [Validators.required, Validators.min(0.1), Validators.max(200)]),
+        dureeMinutes: this.fb.nonNullable.control(defaut.dureeMinutes,
+          [Validators.required, Validators.min(1)])
+      }));
+    }
+    this.formulairePreferences.patchValue({
+      theme: preferences.theme, langue: preferences.langue
+    });
+    // Le bouton reste inactif tant que rien n'a bougé : le remplissage initial
+    // ne doit pas compter comme une modification de l'utilisateur.
+    this.formulairePreferences.markAsPristine();
+    // Branché APRÈS le remplissage, et UNE SEULE FOIS : câblé avant, le
+    // remplissage initial déclencherait lui-même un enregistrement ; câblé à
+    // chaque « Réessayer », chaque modification partirait en double.
+    if (!this.automatiqueBranche) {
+      this.automatiqueBranche = true;
+      this.brancherEnregistrementAutomatique();
+    }
+    // Écrit APRÈS le remplissage : ce signal est le seul déclencheur de rendu
+    // de la section, un FormArray muté n'en produisant aucun sous OnPush.
+    this.etatPreferences.set('pret');
+  }
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ ENREGISTREMENT AUTOMATIQUE                                            │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Pas de bouton : un réglage d'affichage qu'il faut penser à valider est un
+   * réglage qu'on croit avoir posé. Trois précautions rendent la chose sûre :
+   *
+   *  - `debounceTime` : on attend la fin de la frappe, sinon chaque chiffre
+   *    tapé dans « distance » déclencherait sa propre requête ;
+   *  - `filter(valide)` : une saisie momentanément invalide (champ vidé pour
+   *    être réécrit) ne part pas au serveur et n'écrase rien ;
+   *  - `switchMap` : une modification plus récente ANNULE la précédente, sans
+   *    quoi deux réponses pourraient revenir dans le désordre et la dernière
+   *    écrite ne serait pas la dernière voulue.
+   *
+   * Le THÈME, lui, est appliqué immédiatement et hors du debounce : l'aperçu
+   * doit suivre le clic, pas la latence réseau.
+   */
+  private automatiqueBranche = false;
+
+  private brancherEnregistrementAutomatique(): void {
+    this.formulairePreferences.controls.theme.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(theme => this.preferences.previsualiserTheme(theme));
+
+    this.formulairePreferences.valueChanges.pipe(
+      debounceTime(600),
+      distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      filter(() => this.formulairePreferences.valid),
+      tap(() => this.etatEnregistrement.set('encours')),
+      switchMap(() => this.preferences.enregistrer(this.formulairePreferences.getRawValue())
+        .pipe(catchError(() => of(null)))),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe(resultat => {
+      this.etatEnregistrement.set(resultat ? 'ok' : 'erreur');
+      if (resultat) {
+        this.formulairePreferences.markAsPristine();
       }
     });
   }

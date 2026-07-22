@@ -1,0 +1,111 @@
+    <section class="carte formulaire">
+      <img src="assets/favicon.png" alt="" width="48" height="48" class="embleme" />
+      <h1>Créer un compte</h1>
+      <p class="silence sous-titre">Un carnet d'entraînement, en trente secondes.</p>
+      <p class="legende-requis"><span class="obligatoire" aria-hidden="true">*</span> champ obligatoire</p>
+
+      <form [formGroup]="formulaire" (ngSubmit)="soumettre()">
+        <label class="etiquette requis" for="nom">Nom</label>
+        <input pInputText id="nom" aria-required="true" type="text" formControlName="nom" autocomplete="name" />
+        @if (champInvalide('nom')) { <p class="erreur">Le nom est obligatoire.</p> }
+
+        <label class="etiquette requis" for="pays">Pays</label>
+  <!--
+    Liste FERMÉE et non saisie libre : le pays choisi doit exister dans le
+    référentiel qui sert au géocodage, sans quoi aucune ville ne serait
+    trouvable. `filter` rend les 249 entrées utilisables au clavier.
+  -->
+  <p-select inputId="pays" [options]="pays()" optionLabel="nom" optionValue="nom"
+            formControlName="pays" [filter]="true" filterBy="nom"
+            filterPlaceholder="Rechercher un pays" placeholder="Choisissez un pays"
+            (onChange)="changerPays()"
+            styleClass="pleine-largeur" ariaLabel="Pays" />
+  <p class="aide">Il détermine les villes proposées ci-dessous.</p>
+
+  <label class="etiquette requis" for="villeParDefaut">Ville habituelle</label>
+        <div class="autocompletion">
+          <input pInputText id="villeParDefaut" aria-required="true" type="text" formControlName="villeParDefaut"
+                 placeholder="Lille" autocomplete="off" role="combobox"
+                 [attr.aria-expanded]="suggestions().length > 0"
+                 [attr.aria-activedescendant]="indexActif() >= 0 ? 'ville-' + indexActif() : null"
+                 aria-controls="suggestions-ville"
+                 (input)="rechercherVille($any($event.target).value)"
+                 (keydown)="naviguer($event)" (blur)="fermerSuggestions()" />
+          @if (suggestions().length > 0) {
+            <ul id="suggestions-ville" class="suggestions" role="listbox">
+              @for (suggestion of suggestions(); track suggestion.nom; let i = $index) {
+                <li [id]="'ville-' + i" role="option" [attr.aria-selected]="i === indexActif()"
+                    [class.actif]="i === indexActif()" (mousedown)="choisir(suggestion)">
+                  <span>{{ suggestion.nom }}</span>
+                  @if (suggestion.departement) {
+                    <span class="departement">{{ suggestion.departement }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </div>
+        @if (champInvalide('villeParDefaut')) { <p class="erreur">La ville est obligatoire.</p> }
+        <p class="aide">
+          Elle pré-remplira vos séances et permettra d'afficher la météo prévue
+          dès que vous choisirez une date.
+        </p>
+
+        <label class="etiquette requis" for="email">Email</label>
+        <input pInputText id="email" aria-required="true" type="email" formControlName="email" autocomplete="email"
+               placeholder="vous@exemple.fr" inputmode="email" spellcheck="false"
+               [attr.aria-invalid]="champInvalide('email')" />
+        @if (champInvalide('email')) {
+          <p class="erreur">
+            @if (formulaire.controls.email.hasError('required')) { L'email est obligatoire. }
+            @else { Adresse incomplète — il manque le domaine, par exemple .fr ou .com. }
+          </p>
+        }
+
+        <label class="etiquette requis" for="motDePasse">Mot de passe</label>
+        <!--
+          p-password avec son évaluation intégrée. La jauge maison et le
+          validateur robustesseMotDePasse disparaissent de l'écran : PrimeNG
+          affiche le même retour immédiat. Le validateur BLOQUANT
+(longueur minimale) reste, lui, dans le formulaire —
+          une jauge informe, elle n'interdit rien.
+        -->
+        <p-password inputId="motDePasse" formControlName="motDePasse" [toggleMask]="true"
+                    autocomplete="new-password" promptLabel="Choisissez un mot de passe"
+                    weakLabel="Faible" mediumLabel="Moyen" strongLabel="Fort"
+                    styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'"
+                    (keyup)="detecterMajuscules($event)" />
+        @if (champInvalide('motDePasse')) {
+          <p class="erreur">
+            5 caractères minimum.
+          </p>
+        }
+        @if (majusculesActives()) {
+          <p class="avertissement" role="status">⚠ La touche Verr. Maj semble active.</p>
+        }
+
+        <label class="etiquette requis" for="confirmation">Confirmer le mot de passe</label>
+        <p-password inputId="confirmation" formControlName="confirmation" [feedback]="false"
+                    [toggleMask]="true" autocomplete="new-password"
+                    styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'" />
+        @if (formulaire.hasError('motsDePasseDifferents') && formulaire.controls.confirmation.touched) {
+          <p class="erreur">Les mots de passe ne correspondent pas.</p>
+        }
+
+        <!-- Désactivé tant que le formulaire est invalide (champs obligatoires,
+             email, robustesse du mot de passe, concordance) ou pendant l'envoi. -->
+        <p-button type="submit" [label]="envoiEnCours() ? 'Création…' : 'Créer mon compte'"
+                  [loading]="envoiEnCours()" [disabled]="formulaire.invalid || envoiEnCours()"
+                  styleClass="pleine-largeur" />
+
+        @if (messageErreur(); as message) {
+          <p class="erreur globale" role="alert">{{ message }}</p>
+        }
+      </form>
+
+      <div class="bascule">
+        <span class="silence">Déjà inscrit ?</span>
+        <a pButton routerLink="/connexion" severity="secondary" [outlined]="true"
+         class="pleine-largeur">Se connecter</a>
+      </div>
+    </section>

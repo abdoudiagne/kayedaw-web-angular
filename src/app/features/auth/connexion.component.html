@@ -1,0 +1,74 @@
+<div class="accueil">
+  <!--
+    L'argumentaire a migré vers la page d'ACCUEIL. Un écran de connexion est un
+    formulaire de deux champs : l'entourer d'arguments de vente s'adresse à
+    quelqu'un qui est déjà convaincu — il vient se connecter.
+    Reste un lien de retour, pour qui atterrit ici par un lien direct.
+  -->
+
+  <section class="carte formulaire">
+    <h2 class="titre-carte">Connexion</h2>
+    <p class="silence sous-titre">Content de vous revoir.</p>
+    <p class="legende-requis"><span class="obligatoire" aria-hidden="true">*</span> champ obligatoire</p>
+
+    <form [formGroup]="formulaire" (ngSubmit)="soumettre()">
+      <label class="etiquette requis" for="email">Email</label>
+      <input pInputText id="email" type="email" formControlName="email" autocomplete="email"
+             aria-required="true"
+             placeholder="vous@exemple.fr" inputmode="email" spellcheck="false"
+             [attr.aria-invalid]="champInvalide('email')"
+             [attr.aria-describedby]="champInvalide('email') ? 'erreur-email' : null" />
+      @if (champInvalide('email')) {
+        <p class="erreur" id="erreur-email">
+          @if (formulaire.controls.email.hasError('required')) { L'email est obligatoire. }
+          @else { Adresse incomplète — il manque le domaine, par exemple .fr ou .com. }
+        </p>
+      }
+
+      <label class="etiquette requis" for="motDePasse">Mot de passe</label>
+      <!--
+        p-password remplace le champ ET le révélateur maison : la bascule
+        d'affichage, son icône et son étiquette accessible sont fournies.
+        L'évaluation de robustesse est désactivée : sur un écran de
+        CONNEXION, juger un mot de passe existant n'a aucun sens.
+
+        ⚠️ CE QUE L'ON PERD : le révélateur maison était un <button> avec
+        un nom accessible en sr-only, donc atteignable au clavier et au
+        pilotage vocal. PrimeNG rend une icône sans rôle ni nom, hors de
+        l'ordre de tabulation. C'est un recul d'accessibilité, accepté ici
+        au nom de l'uniformité de la bibliothèque — pas un détail oublié.
+      -->
+      <p-password inputId="motDePasse" formControlName="motDePasse" [feedback]="false"
+                  [toggleMask]="true" placeholder="••••••••" autocomplete="current-password"
+                  styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'"
+                  (keyup)="detecterMajuscules($event)" />
+      @if (champInvalide('motDePasse')) {
+        <p class="erreur">Le mot de passe est obligatoire.</p>
+      }
+      <!-- Cause n°1 des échecs de connexion inexpliqués -->
+      @if (majusculesActives()) {
+        <p class="avertissement" role="status">⚠ La touche Verr. Maj semble active.</p>
+      }
+
+      <!-- Désactivé tant que le formulaire est invalide ou pendant l'envoi.
+           Les champs affichent leur erreur au blur (dirty/touched), donc
+           l'utilisateur voit ce qui manque avant même d'atteindre le bouton. -->
+      <!-- L'attente est portée par loading : le libellé reste stable, l'indicateur
+           est celui de la bibliothèque plutôt qu'un rouet maison. -->
+      <p-button type="submit" [label]="envoiEnCours() ? 'Connexion…' : 'Se connecter'"
+                [loading]="envoiEnCours()" [disabled]="formulaire.invalid || envoiEnCours()"
+                styleClass="pleine-largeur" />
+
+      @if (messageErreur(); as message) {
+        <p class="erreur globale" role="alert">{{ message }}</p>
+      }
+    </form>
+
+    <div class="bascule">
+      <a routerLink="/" class="retour-accueil">← Découvrir KayeDaw</a>
+      <span class="silence">Pas encore de compte ?</span>
+      <a pButton routerLink="/inscription" severity="secondary" [outlined]="true"
+         class="pleine-largeur">Créer un compte</a>
+    </div>
+  </section>
+</div>

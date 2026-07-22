@@ -20,6 +20,19 @@ export const TYPES_SEANCE = [
 ] as const satisfies ReadonlyArray<{ valeur: TypeSeance; libelle: string }>;
 
 /**
+ * ENDURANCE → « Endurance ».
+ *
+ * La fonction vit AVEC le modèle et non dans un composant : elle était privée
+ * à la liste, si bien que le détail, les statistiques et l'administration
+ * affichaient l'enum brut — « SORTIE_LONGUE » sous les yeux de l'utilisateur.
+ * Le repli sur la valeur brute couvre un type ajouté côté serveur avant de
+ * l'être ici : mieux vaut un libellé laid qu'une cellule vide.
+ */
+export function libelleType(type: TypeSeance): string {
+  return TYPES_SEANCE.find(t => t.valeur === type)?.libelle ?? type;
+}
+
+/**
  * Miroir de l'enum Kotlin SourceMeteo. L'utilisateur doit distinguer une
  * OBSERVATION d'une PRÉVISION : les deux n'ont pas la même valeur dans un carnet.
  */
@@ -51,6 +64,12 @@ export interface Seance {
   readonly vitesseKmH: number;
   readonly intensite: string;
   readonly ville: string | null;
+  /**
+   * Pays de la SÉANCE, pas du compte : on ne court pas toujours chez soi, et
+   * relire le pays sur le profil prêterait à un compte déménagé des séances
+   * qu'il n'a jamais courues là. Nul sur les séances antérieures au champ.
+   */
+  readonly pays: string | null;
   /** Température MAXIMALE du jour — le nom l'explicite face à `temperatureMinC`. */
   readonly temperatureMaxC: number | null;
   readonly temperatureMinC: number | null;
@@ -70,13 +89,15 @@ export interface CreerSeanceRequest {
   type: TypeSeance;
   distanceKm: number;
   dureeMinutes: number;
-  /** ISO local `2026-07-20T18:30`, jusqu'à 14 jours dans le futur. */
+  /** ISO local `2026-07-20T18:30`, jusqu'à 30 jours dans le futur. */
   dateHeure: string;
   commentaire?: string | null;
   ville?: string | null;
+  /** Absent, le serveur retombe sur le pays du compte. */
+  pays?: string | null;
 }
 
-export type ModifierSeanceRequest = Omit<CreerSeanceRequest, 'ville'>;
+export type ModifierSeanceRequest = Omit<CreerSeanceRequest, 'ville' | 'pays'>;
 
 /** Miroir de la Page de Spring Data. */
 export interface Page<T> {

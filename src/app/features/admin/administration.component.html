@@ -1,0 +1,304 @@
+<header class="titre">
+  <div>
+    <h1>Administration</h1>
+    <p class="sous-titre">Connecté en tant que {{ auth.utilisateur()?.email }}</p>
+  </div>
+  <!--
+    Les deux actions sont GROUPÉES. Enfants directs d'un conteneur en
+    `space-between`, elles étaient réparties sur toute la largeur : « Exporter »
+    finissait au milieu de la barre, sans rapport visible avec « Rafraîchir »
+    ni avec le titre.
+  -->
+  <div class="actions-titre">
+    <p-button label="Exporter en PDF" icon="pi pi-file-pdf" severity="secondary"
+              [outlined]="true" [loading]="exportEnCours()" [disabled]="exportEnCours()"
+              (onClick)="exporter()" />
+    <p-button label="Rafraîchir" icon="pi pi-refresh" severity="secondary" [outlined]="true"
+              (onClick)="rafraichir()" />
+  </div>
+</header>
+
+@if (donnees(); as tableau) {
+  <dl class="indicateurs">
+    <div><dt>Utilisateurs</dt><dd>{{ tableau.utilisateurs.totalElements }}</dd></div>
+    <!-- La PORTÉE est écrite dans l'intitulé : l'API ne renvoie pas de
+         compte global d'administrateurs, seulement la page demandée.
+         Sans cette mention, un « 1 » posé à côté d'un total de 40 comptes
+         se lisait comme « un seul admin dans toute la base ». -->
+    <div><dt>Administrateurs <small>sur cette page</small></dt><dd>{{ nombreAdmins() }}</dd></div>
+    <div><dt>Requêtes servies</dt><dd>{{ tableau.metriques.totalRequetes }}</dd></div>
+    <div><dt>Routes appelées</dt><dd>{{ routes().length }}</dd></div>
+  </dl>
+
+  <section>
+    <h2>Utilisateurs</h2>
+
+    <!--
+      Le champ portait la classe `.champ`, disparue avec la bascule PrimeNG :
+      sa largeur maximale ne s'appliquait plus et il restait à sa taille par
+      défaut, minuscule à côté d'un tableau pleine largeur.
+    -->
+    <div class="filtres">
+      <label class="etiquette" for="recherche">Rechercher</label>
+      <p-iconfield class="champ-recherche">
+        <p-inputicon class="pi pi-search" />
+        <input pInputText id="recherche" type="search" [formControl]="recherche"
+               placeholder="nom ou email" class="pleine-largeur" />
+      </p-iconfield>
+    </div>
+
+    <!--
+      p-table apporte la pagination, l'état vide et la structure
+      accessible. L'attribut dataKey, posé sur l'identifiant technique : la table réutilise
+      ses lignes au lieu de les recréer à chaque rafraîchissement, comme le
+      faisait le track du @for qu'elle remplace.
+
+      ⚠️ La pagination reste SERVEUR : lazy empêche p-table de paginer
+      elle-même le tableau qu'on lui donne — elle n'en a qu'une page.
+    -->
+    <!--
+      Barre d'action groupée : affichée UNIQUEMENT quand une sélection
+      existe. Un bouton « Supprimer la sélection » toujours visible mais
+      inerte se lit comme une panne ; ici son apparition EST le retour.
+    -->
+    @if (selection().length > 0) {
+      <div class="barre-selection" role="status">
+        <span>{{ selection().length }} compte(s) sélectionné(s)</span>
+        <p-button label="Supprimer la sélection" icon="pi pi-trash" severity="danger"
+                  size="small" [loading]="suppressionEnMasse()"
+                  (onClick)="supprimerSelection()" />
+        <p-button label="Tout désélectionner" severity="secondary" [text]="true" size="small"
+                  (onClick)="selection.set([])" />
+      </div>
+    }
+
+    <!--
+      ⚠️ Le paginateur était conditionné à `totalPages > 1` : avec six comptes
+      il ne s'affichait pas du tout, et rien ne disait combien il y en avait ni
+      qu'on pouvait en montrer davantage. Il apparaît désormais dès qu'il y a
+      une ligne, et porte deux informations que l'écran n'avait pas : le TOTAL
+      et le nombre de lignes par page.
+
+      ⚠️ `[currentPageReportTemplate]` en LIAISON, pas en attribut littéral :
+      Angular lit `{first}` dans un attribut comme le début d'un message ICU et
+      refuse de compiler le gabarit.
+    -->
+    <p-table [value]="lignesUtilisateurs()" dataKey="id" [lazy]="true"
+             [(selection)]="selectionTable" [selectionMode]="null"
+             [rowSelectable]="ligneSelectionnable"
+             [paginator]="tableau.utilisateurs.totalElements > 0"
+             [rows]="tableau.utilisateurs.size"
+             [rowsPerPageOptions]="[10, 20, 50]"
+             [showCurrentPageReport]="true"
+             [currentPageReportTemplate]="'{first} à {last} sur {totalRecords} compte(s)'"
+             [totalRecords]="tableau.utilisateurs.totalElements"
+             [first]="tableau.utilisateurs.number * tableau.utilisateurs.size"
+             (onPage)="allerPage($event.first, $event.rows)"
+             [sortField]="champTri()" [sortOrder]="sensTri()" [customSort]="true"
+             (onSort)="trier($event)"
+             [tableStyleClass]="'p-datatable-sm'"
+             [responsiveLayout]="'stack'" [breakpoint]="'46rem'">
+      <ng-template #caption>
+        <span class="sr-only">Liste des comptes enregistrés</span>
+      </ng-template>
+      <ng-template #header>
+        <tr>
+          <!-- La case d'en-tête ne coche que les lignes SÉLECTIONNABLES :
+               son propre compte en est exclu, le serveur le refuserait. -->
+          <th scope="col" style="width: 3rem">
+            <p-tableHeaderCheckbox ariaLabel="Tout sélectionner" />
+          </th>
+          <!--
+            pSortableColumn rend l'en-tête cliquable ET focalisable au
+            clavier, avec aria-sort tenu à jour : le tri est annoncé aux
+            lecteurs d'écran, pas seulement dessiné par une flèche.
+            Le nom de champ est celui de l'ENTITÉ JPA — c'est lui que
+            Spring Data reçoit dans le paramètre sort.
+          -->
+          <th scope="col" pSortableColumn="nom">
+            Nom <p-sortIcon field="nom" />
+          </th>
+          <th scope="col" pSortableColumn="email">
+            Email <p-sortIcon field="email" />
+          </th>
+          <th scope="col" pSortableColumn="role">
+            Rôle <p-sortIcon field="role" />
+          </th>
+          <th scope="col" pSortableColumn="actif">
+            État <p-sortIcon field="actif" />
+          </th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-utilisateur>
+        <tr [class.soi-meme]="estSoiMeme(utilisateur)">
+          <td>
+            @if (!estSoiMeme(utilisateur)) {
+              <p-tableCheckbox [value]="utilisateur"
+                               [attr.aria-label]="'Sélectionner ' + utilisateur.email" />
+            }
+          </td>
+          <td>{{ utilisateur.nom }}</td>
+          <td class="email">{{ utilisateur.email }}</td>
+          <td>
+            <p-tag [value]="libelleRole(utilisateur.role)"
+                   [severity]="utilisateur.role === 'ADMIN' ? 'warn' : 'secondary'" />
+          </td>
+          <td>
+            <p-tag [value]="utilisateur.actif ? 'Actif' : 'Bloqué'"
+                   [severity]="utilisateur.actif ? 'success' : 'danger'"
+                   [icon]="utilisateur.actif ? 'pi pi-check' : 'pi pi-ban'" />
+          </td>
+          <td class="actions">
+            <!-- Sur soi-même, le serveur refuse : on n'affiche pas de piège -->
+            <!--
+              ICÔNES SEULES, mais jamais MUETTES : ariaLabel porte le nom
+              accessible et pTooltip l'affiche au survol. Une icône sans
+              nom est invisible pour un lecteur d'écran et indevinable pour
+              qui ne connaît pas la convention — le pictogramme décore, le
+              libellé informe.
+            -->
+            @if (!estSoiMeme(utilisateur)) {
+              <p-button icon="pi pi-pencil" severity="secondary" [text]="true" size="small"
+                        ariaLabel="Modifier" pTooltip="Modifier" tooltipPosition="top"
+                        (onClick)="ouvrirEdition(utilisateur)" />
+              <p-button [icon]="utilisateur.role === 'ADMIN' ? 'pi pi-arrow-down' : 'pi pi-arrow-up'"
+                        severity="secondary" [text]="true" size="small"
+                        [ariaLabel]="utilisateur.role === 'ADMIN' ? 'Rétrograder' : 'Promouvoir'"
+                        [pTooltip]="utilisateur.role === 'ADMIN' ? 'Rétrograder' : 'Promouvoir'"
+                        tooltipPosition="top" (onClick)="basculerRole(utilisateur)" />
+              <p-button [icon]="utilisateur.actif ? 'pi pi-ban' : 'pi pi-unlock'"
+                        [severity]="utilisateur.actif ? 'warn' : 'success'" [text]="true"
+                        size="small" [ariaLabel]="utilisateur.actif ? 'Bloquer' : 'Débloquer'"
+                        [pTooltip]="utilisateur.actif ? 'Bloquer' : 'Débloquer'"
+                        tooltipPosition="top" (onClick)="basculerBlocage(utilisateur)" />
+              <p-button icon="pi pi-list" severity="secondary" [text]="true" size="small"
+                        ariaLabel="Séances" pTooltip="Séances" tooltipPosition="top"
+                        (onClick)="voirSeances(utilisateur)" />
+              <p-button icon="pi pi-trash" severity="danger" [text]="true" size="small"
+                        ariaLabel="Supprimer" pTooltip="Supprimer" tooltipPosition="top"
+                        (onClick)="supprimer(utilisateur)" />
+            } @else {
+              <span class="silence">vous</span>
+            }
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template #emptymessage>
+        <tr><td colspan="6" class="vide">Aucun utilisateur ne correspond.</td></tr>
+      </ng-template>
+    </p-table>
+  </section>
+
+  <!--
+    ÉDITION dans un p-dialog plutôt que sur un écran dédié : la correction
+    d'un nom ou le déblocage d'un compte se fait en regardant la liste, on
+    ne veut pas la perdre de vue puis la retrouver.
+  -->
+  <p-dialog [visible]="!!enEdition()" (visibleChange)="fermerEdition()" [modal]="true"
+            header="Modifier le compte" [style]="{ width: 'min(28rem, 92vw)' }">
+    @if (enEdition(); as cible) {
+      <form [formGroup]="formulaireEdition" (ngSubmit)="enregistrerEdition()" class="edition">
+        <p class="silence cible" translate="no">{{ cible.email }}</p>
+
+        <label class="etiquette requis" for="edition-nom">Nom</label>
+        <input pInputText id="edition-nom" formControlName="nom" class="pleine-largeur" />
+
+        <!-- Le pays AVANT la ville, comme partout ailleurs : c'est lui qui
+             détermine le lieu, et en changer vide la ville. -->
+        <label class="etiquette requis" for="edition-pays">Pays</label>
+        <p-select inputId="edition-pays" [options]="pays()" optionLabel="nom"
+                  optionValue="nom" formControlName="pays" [filter]="true" filterBy="nom"
+                  filterPlaceholder="Rechercher un pays" styleClass="pleine-largeur"
+                  (onChange)="changerPays()" ariaLabel="Pays" />
+
+        <label class="etiquette requis" for="edition-ville">Ville de référence</label>
+        <input pInputText id="edition-ville" formControlName="villeParDefaut"
+               class="pleine-largeur" />
+        @if (formulaireEdition.invalid && formulaireEdition.dirty) {
+          <p class="erreur">Le nom et la ville sont obligatoires.</p>
+        }
+
+        <p-button type="submit" label="Enregistrer" icon="pi pi-check"
+                  [loading]="editionEnCours()" [disabled]="formulaireEdition.pristine" />
+      </form>
+
+      <hr class="separation" />
+
+      <form [formGroup]="formulaireMdpAdmin" (ngSubmit)="reinitialiserMotDePasse()"
+            class="edition">
+        <label class="etiquette requis" for="edition-mdp">Nouveau mot de passe</label>
+        <p-password inputId="edition-mdp" formControlName="nouveau" [toggleMask]="true"
+                    styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'" />
+        <p class="aide">
+          L'ancien mot de passe n'est pas demandé : un administrateur ne le
+          connaît pas. Communiquez le nouveau à l'intéressé.
+        </p>
+        <p-button type="submit" label="Réinitialiser" icon="pi pi-key" severity="secondary"
+                  [loading]="mdpAdminEnCours()" [disabled]="formulaireMdpAdmin.invalid" />
+      </form>
+    }
+  </p-dialog>
+
+  @if (seancesConsultees(); as consultation) {
+    <section class="consultation carte">
+      <header class="entete-consultation">
+        <!-- tabindex="-1" : le titre n'entre pas dans l'ordre de tabulation
+             mais peut RECEVOIR le focus par programme. C'est ce qui permet
+             d'amener un lecteur d'écran sur le panneau qui vient de
+             s'ouvrir, au lieu de le laisser au bouton « Séances ». -->
+        <h2 id="titre-consultation" tabindex="-1">Séances de {{ consultation.nom }}</h2>
+        <p-button label="Fermer" severity="secondary" [text]="true" size="small"
+                  (onClick)="fermerSeances()" />
+      </header>
+
+      @if (consultation.page.content.length === 0) {
+        <p class="vide">Cet utilisateur n'a aucune séance.</p>
+      } @else {
+        <ul class="seances">
+          @for (seance of consultation.page.content; track seance.id) {
+            <li>
+              <p-tag [value]="libelleType(seance.type)" severity="info" />
+              <span>{{ seance.dateHeure | date:'dd/MM/yy HH:mm' }}</span>
+              <span>{{ seance.distanceKm }} km</span>
+              @if (seance.estPlanifiee) { <span class="planifiee">planifiée</span> }
+            </li>
+          }
+        </ul>
+        <p class="silence">{{ consultation.page.totalElements }} séance(s) au total.</p>
+      }
+    </section>
+  }
+
+  <section>
+    <!--
+      ⚠️ `<details>` natif plutôt qu'un accordéon : il est ouvrable au clavier,
+      annoncé comme tel, et fonctionne sans JavaScript. Le titre reste un `h2`
+      DANS le `summary` pour que la structure de titres de la page tienne — un
+      lecteur d'écran navigue par titres.
+
+      Fermé par défaut : quinze routes occupaient la moitié de l'écran alors
+      que la page sert à administrer des comptes, pas à lire des compteurs.
+    -->
+    <details class="repliable">
+      <summary><h2>Trafic par route</h2></summary>
+    @if (routes().length > 0) {
+      <ul class="routes">
+        @for (ligne of routes(); track ligne.route) {
+          <li>
+            <span class="chemin">{{ ligne.route }}</span>
+            <span class="barre"><span [style.width.%]="ligne.pourcentage"></span></span>
+            <span class="valeur">{{ ligne.appels }}</span>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="vide">Aucune requête comptabilisée depuis le démarrage.</p>
+    }
+    </details>
+  </section>
+} @else if (enErreur()) {
+  <p class="vide" role="alert">Données d'administration indisponibles.</p>
+} @else {
+  <p class="vide" aria-busy="true">Chargement…</p>
+}

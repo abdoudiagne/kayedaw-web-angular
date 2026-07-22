@@ -1,0 +1,252 @@
+<a class="evitement" href="#contenu">Aller au contenu</a>
+
+<header class="entete">
+  <a routerLink="/" class="marque" aria-label="KayeDaw, accueil">
+    <!--
+      width/height explicites : le navigateur réserve la place avant même
+      d'avoir chargé l'image, ce qui évite le décalage de mise en page (CLS).
+    -->
+    <img src="assets/logo.png" alt="KayeDaw" width="150" height="44" />
+  </a>
+
+  @if (auth.estConnecte()) {
+    <!--
+      L'administrateur ne voit NI séances NI statistiques : son compte sert
+      à administrer, pas à courir. Afficher un carnet vide et des
+      statistiques à zéro n'informe personne et allonge la navigation.
+      Les routes restent accessibles à qui connaît l'URL — c'est un choix
+      d'ergonomie, pas une règle de sécurité.
+    -->
+    <!--
+      « Accueil » et « À propos » sont présents EN PERMANENCE, connecté ou non.
+
+      C'est ce qui a fait tomber le garde de la racine : ces deux liens doivent
+      mener à une vraie page, pas rebondir vers l'écran du rôle. L'accueil
+      s'adapte donc à la session — ses appels à l'action deviennent ceux du
+      rôle — au lieu de se fermer.
+
+      ⚠️ `[routerLinkActiveOptions]="{ exact: true }"` sur « Accueil » : sans
+      lui, `/` étant préfixe de TOUTE URL, le lien resterait allumé sur chaque
+      écran de l'application.
+    -->
+    @if (auth.estAdmin()) {
+      <nav class="navigation">
+        <a routerLink="/" routerLinkActive="actif"
+           [routerLinkActiveOptions]="{ exact: true }">Accueil</a>
+        <a routerLink="/administration" routerLinkActive="actif">Administration</a>
+        <a routerLink="/a-propos" routerLinkActive="actif">À propos</a>
+      </nav>
+    } @else {
+      <nav class="navigation">
+        <a routerLink="/" routerLinkActive="actif"
+           [routerLinkActiveOptions]="{ exact: true }">Accueil</a>
+        <a routerLink="/seances" routerLinkActive="actif">Mes séances</a>
+        <a routerLink="/statistiques" routerLinkActive="actif">Statistiques</a>
+        <a routerLink="/a-propos" routerLinkActive="actif">À propos</a>
+      </nav>
+    }
+
+
+    <div class="utilisateur">
+      <!-- Tout le bloc identité est cliquable, pas seulement l'avatar :
+           une cible de 2,3 rem seule est petite, surtout au doigt. -->
+      <a routerLink="/profil" class="identite" routerLinkActive="actif"
+         [attr.aria-label]="'Mon profil, ' + (auth.utilisateur()?.nom ?? '')">
+        <!-- translate="no" : les initiales sont des LETTRES, pas des mots.
+             Google traduisait « CE » (Compte E2E) en « THIS ». Même
+             protection sur le nom propre juste après. -->
+        <span class="avatar" aria-hidden="true" translate="no">{{ auth.initiales() }}</span>
+        <span class="nom" translate="no">
+          <strong>{{ auth.utilisateur()?.nom }}</strong>
+          <small>{{ auth.villeParDefaut() }}</small>
+        </span>
+      </a>
+      <p-button label="Déconnexion" severity="secondary" [outlined]="true" size="small"
+                (onClick)="auth.deconnecter()" />
+    </div>
+
+  <!--
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ THÈME ET LANGUE, HORS DE TOUTE SESSION                                  │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    Ils vivaient dans les préférences du compte, sur /profil : inaccessibles à
+    un visiteur, et à trois clics pour les autres. Lire une page en plein
+    soleil ou dans le noir ne demande pourtant pas de créer un compte.
+
+    Le bloc est posé AVANT l'identité et la déconnexion, donc à la même place
+    quel que soit l'état de la session — un réglage qui se déplace selon qu'on
+    est connecté ou non se cherche à chaque fois.
+
+    Icônes seules pour le thème : trois libellés « Automatique / Clair /
+    Sombre » prendraient la moitié de la barre. Le nom accessible est porté par
+    `ariaLabel`, que les tests visent aussi.
+  -->
+  <div class="reglages">
+    <!--
+      Des LISTES plutôt que des boutons segmentés : trois icônes côte à côte
+      obligeaient à deviner laquelle était active, et n'affichaient jamais le
+      nom du réglage courant. Une liste montre l'état retenu en toutes lettres
+      et ne prend qu'un seul emplacement, quel que soit le nombre d'options.
+
+      L'icône reste, DEVANT le libellé : elle se repère plus vite que le mot.
+    -->
+    <!--
+      ⚠️ Le DÉCLENCHEUR ne porte qu'une icône, les OPTIONS gardent leur libellé.
+
+      Une barre d'en-tête n'a pas la place de deux mots ; mais une liste de
+      pictogrammes nus serait indéchiffrable au moment de choisir — « soleil »
+      et « écran » ne disent pas d'eux-mêmes « clair » et « automatique ». Le
+      raccourci se paie une fois, à l'ouverture de la liste.
+
+      `ariaLabel` porte le nom du réglage et `title` celui de la valeur en
+      cours : sans eux, un déclencheur réduit à une icône n'a aucun nom
+      accessible, et rien ne survolerait non plus à la souris.
+    -->
+    <p-select [options]="optionsTheme" optionLabel="libelle" optionValue="valeur"
+              [ngModel]="themeCourant" (ngModelChange)="changerTheme($event)"
+              styleClass="reglage reglage-icone" ariaLabel="Thème d'affichage"
+              appendTo="body">
+      <ng-template #selectedItem let-choisi>
+        <i [class]="iconeTheme(choisi)" aria-hidden="true"
+           [attr.title]="'Thème : ' + libelleTheme(choisi)"></i>
+      </ng-template>
+      <ng-template #item let-option>
+        <span class="valeur-reglage">
+          <i [class]="option.icone" aria-hidden="true"></i>{{ option.libelle }}
+        </span>
+      </ng-template>
+    </p-select>
+
+    <!--
+      Le globe est CONSTANT : aucune icône ne distingue honnêtement deux
+      langues — un drapeau désigne un pays, pas une langue, et l'anglais en
+      compte des dizaines. La langue en cours se lit dans la page elle-même, et
+      l'option retenue reste mise en évidence à l'ouverture de la liste.
+    -->
+    <p-select [options]="optionsLangue" optionLabel="libelle" optionValue="valeur"
+              [ngModel]="langueCourante" (ngModelChange)="changerLangue($event)"
+              styleClass="reglage reglage-icone" ariaLabel="Langue"
+              appendTo="body" translate="no">
+      <ng-template #selectedItem let-choisi>
+        <i class="pi pi-globe" aria-hidden="true"
+           [attr.title]="'Langue : ' + libelleLangue(choisi)"></i>
+      </ng-template>
+    </p-select>
+  </div>
+
+  } @else {
+    <!--
+      Visiteur : navigation de CONTENU à gauche, actions de compte à droite.
+      Deux <nav> et non un seul — « Accueil » et « À propos » disent où aller
+      dans le site, « Connexion » et « Créer un compte » sont des actions.
+      Les mêler mettrait sur le même plan une lecture et un engagement.
+    -->
+    <nav class="navigation">
+      <a routerLink="/" routerLinkActive="actif"
+         [routerLinkActiveOptions]="{ exact: true }">Accueil</a>
+      <a routerLink="/a-propos" routerLinkActive="actif">À propos</a>
+    </nav>
+
+    <nav class="navigation fin">
+      <a routerLink="/connexion" routerLinkActive="actif">Connexion</a>
+      <a pButton routerLink="/inscription" class="p-button-sm">Créer un compte</a>
+    </nav>
+
+  <!--
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ THÈME ET LANGUE, HORS DE TOUTE SESSION                                  │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    Ils vivaient dans les préférences du compte, sur /profil : inaccessibles à
+    un visiteur, et à trois clics pour les autres. Lire une page en plein
+    soleil ou dans le noir ne demande pourtant pas de créer un compte.
+
+    Le bloc est posé AVANT l'identité et la déconnexion, donc à la même place
+    quel que soit l'état de la session — un réglage qui se déplace selon qu'on
+    est connecté ou non se cherche à chaque fois.
+
+    Icônes seules pour le thème : trois libellés « Automatique / Clair /
+    Sombre » prendraient la moitié de la barre. Le nom accessible est porté par
+    `ariaLabel`, que les tests visent aussi.
+  -->
+  <div class="reglages">
+    <!--
+      Des LISTES plutôt que des boutons segmentés : trois icônes côte à côte
+      obligeaient à deviner laquelle était active, et n'affichaient jamais le
+      nom du réglage courant. Une liste montre l'état retenu en toutes lettres
+      et ne prend qu'un seul emplacement, quel que soit le nombre d'options.
+
+      L'icône reste, DEVANT le libellé : elle se repère plus vite que le mot.
+    -->
+    <!--
+      ⚠️ Le DÉCLENCHEUR ne porte qu'une icône, les OPTIONS gardent leur libellé.
+
+      Une barre d'en-tête n'a pas la place de deux mots ; mais une liste de
+      pictogrammes nus serait indéchiffrable au moment de choisir — « soleil »
+      et « écran » ne disent pas d'eux-mêmes « clair » et « automatique ». Le
+      raccourci se paie une fois, à l'ouverture de la liste.
+
+      `ariaLabel` porte le nom du réglage et `title` celui de la valeur en
+      cours : sans eux, un déclencheur réduit à une icône n'a aucun nom
+      accessible, et rien ne survolerait non plus à la souris.
+    -->
+    <p-select [options]="optionsTheme" optionLabel="libelle" optionValue="valeur"
+              [ngModel]="themeCourant" (ngModelChange)="changerTheme($event)"
+              styleClass="reglage reglage-icone" ariaLabel="Thème d'affichage"
+              appendTo="body">
+      <ng-template #selectedItem let-choisi>
+        <i [class]="iconeTheme(choisi)" aria-hidden="true"
+           [attr.title]="'Thème : ' + libelleTheme(choisi)"></i>
+      </ng-template>
+      <ng-template #item let-option>
+        <span class="valeur-reglage">
+          <i [class]="option.icone" aria-hidden="true"></i>{{ option.libelle }}
+        </span>
+      </ng-template>
+    </p-select>
+
+    <!--
+      Le globe est CONSTANT : aucune icône ne distingue honnêtement deux
+      langues — un drapeau désigne un pays, pas une langue, et l'anglais en
+      compte des dizaines. La langue en cours se lit dans la page elle-même, et
+      l'option retenue reste mise en évidence à l'ouverture de la liste.
+    -->
+    <p-select [options]="optionsLangue" optionLabel="libelle" optionValue="valeur"
+              [ngModel]="langueCourante" (ngModelChange)="changerLangue($event)"
+              styleClass="reglage reglage-icone" ariaLabel="Langue"
+              appendTo="body" translate="no">
+      <ng-template #selectedItem let-choisi>
+        <i class="pi pi-globe" aria-hidden="true"
+           [attr.title]="'Langue : ' + libelleLangue(choisi)"></i>
+      </ng-template>
+    </p-select>
+  </div>
+
+  }
+</header>
+
+<!--
+  TOAST DE PRIMENG à la place des deux piles maison.
+
+  Ce qui disparaît avec elles n'est pas anodin, et c'est le sujet : la file
+  en signal, les minuteries suspendues au survol, la gestion du focus et
+  les deux régions ARIA. p-toast fournit tout cela — il monte ses messages
+  dans une région live, met le compte à rebours en pause au survol et gère
+  la fermeture au clavier.
+
+  La sévérité est décidée par NotificationService, qui reste la façade en
+  français : les huit composants appelants n'ont pas bougé d'une ligne.
+-->
+<p-toast position="top-right" [breakpoints]="{ '40rem': { width: '100%', right: '0', left: '0' } }" />
+
+
+<main class="contenu" id="contenu">
+  <router-outlet />
+</main>
+
+<!-- Boîte de confirmation unique, montée une fois pour toute l'application.
+     Le <dialog> natif écrit à la main cède la place à p-confirmdialog :
+     même piège de focus et même fermeture par Échap, mais fournis par la
+     bibliothèque plutôt que maintenus ici. -->
+<p-confirmdialog />

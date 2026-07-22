@@ -1,16 +1,30 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { BehaviorSubject, combineLatest, forkJoin, of } from 'rxjs';
-import { catchError, debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
-import { Metriques, UtilisateurResume } from '../../core/models/admin.model';
-import { Role } from '../../core/models/auth.model';
-import { Page, Seance } from '../../core/models/seance.model';
+import { catchError, debounceTime, distinctUntilChanged, map, startWith, switchMap }
+  from 'rxjs/operators';
+import { ConfirmationService } from 'primeng/api';
+import { ButtonModule } from 'primeng/button';
+import { IconFieldModule } from 'primeng/iconfield';
+import { InputIconModule } from 'primeng/inputicon';
+import { InputTextModule } from 'primeng/inputtext';
+import { DialogModule } from 'primeng/dialog';
+import { PasswordModule } from 'primeng/password';
+import { SelectModule } from 'primeng/select';
+import { TableModule } from 'primeng/table';
+import { TooltipModule } from 'primeng/tooltip';
+import { TagModule } from 'primeng/tag';
+import { Metriques, RapportSuppression, UtilisateurResume } from '../../core/models/admin.model';
+import { LIBELLES_ROLE, Role } from '../../core/models/auth.model';
+import { libelleType, Page, Seance } from '../../core/models/seance.model';
 import { AdminService } from '../../core/services/admin.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { Pays, PaysService } from '../../core/services/pays.service';
+import { nomDuJour, telecharger } from '../../core/services/telechargement';
 
 interface TableauDeBord {
   readonly utilisateurs: Page<UtilisateurResume>;
@@ -42,256 +56,53 @@ type Etat =
  * sont eux aussi côté serveur — le front ne fait que relayer leurs messages.
  */
 @Component({
-  selector: 'app-administration',
-  standalone: true,
-  imports: [ReactiveFormsModule, DatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <header class="titre">
-      <div>
-        <h1>Administration</h1>
-        <p class="sous-titre">Connecté en tant que {{ auth.utilisateur()?.email }}</p>
-      </div>
-      <button type="button" class="bouton fantome" (click)="rafraichir()">Rafraîchir</button>
-    </header>
-
-    @if (donnees(); as tableau) {
-      <dl class="indicateurs">
-        <div><dt>Utilisateurs</dt><dd>{{ tableau.utilisateurs.totalElements }}</dd></div>
-        <div><dt>Administrateurs</dt><dd>{{ nombreAdmins() }}</dd></div>
-        <div><dt>Requêtes servies</dt><dd>{{ tableau.metriques.totalRequetes }}</dd></div>
-        <div><dt>Routes appelées</dt><dd>{{ routes().length }}</dd></div>
-      </dl>
-
-      <section>
-        <h2>Utilisateurs</h2>
-
-        <div class="filtres">
-          <label class="etiquette" for="recherche">Rechercher</label>
-          <input id="recherche" class="champ" type="search" [formControl]="recherche"
-                 placeholder="nom ou email" />
-        </div>
-
-        <table>
-          <caption class="sr-only">Liste des comptes enregistrés</caption>
-          <thead>
-            <tr>
-              <th scope="col">Nom</th>
-              <th scope="col">Email</th>
-              <th scope="col">Rôle</th>
-              <th scope="col"><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <!--
-              track sur l'identifiant technique : Angular réutilise les lignes
-              existantes au lieu de recréer le DOM à chaque rafraîchissement.
-            -->
-            @for (utilisateur of tableau.utilisateurs.content; track utilisateur.id) {
-              <tr [class.soi-meme]="estSoiMeme(utilisateur)">
-                <td data-intitule="Nom">{{ utilisateur.nom }}</td>
-                <td data-intitule="Email" class="email">{{ utilisateur.email }}</td>
-                <td data-intitule="Rôle">
-                  <span class="role" [attr.data-role]="utilisateur.role">{{ utilisateur.role }}</span>
-                </td>
-                <td class="actions">
-                  <!-- Sur soi-même, le serveur refuse : on n'affiche pas de piège -->
-                  @if (!estSoiMeme(utilisateur)) {
-                    <button type="button" class="lien"
-                            (click)="basculerRole(utilisateur)">
-                      {{ utilisateur.role === 'ADMIN' ? 'Rétrograder' : 'Promouvoir' }}
-                    </button>
-                    <button type="button" class="lien" (click)="voirSeances(utilisateur)">Séances</button>
-                    <button type="button" class="lien danger" (click)="supprimer(utilisateur)">Supprimer</button>
-                  } @else {
-                    <span class="silence">vous</span>
-                  }
-                </td>
-              </tr>
-            } @empty {
-              <tr><td colspan="4" class="vide">Aucun utilisateur ne correspond.</td></tr>
-            }
-          </tbody>
-        </table>
-
-        @if (tableau.utilisateurs.totalPages > 1) {
-          <nav class="pagination" aria-label="Pagination">
-            <button type="button" class="bouton fantome" [disabled]="tableau.utilisateurs.first"
-                    (click)="allerPage(tableau.utilisateurs.number - 1)">Précédent</button>
-            <span class="silence">
-              Page {{ tableau.utilisateurs.number + 1 }} sur {{ tableau.utilisateurs.totalPages }}
-            </span>
-            <button type="button" class="bouton fantome" [disabled]="tableau.utilisateurs.last"
-                    (click)="allerPage(tableau.utilisateurs.number + 1)">Suivant</button>
-          </nav>
-        }
-      </section>
-
-      @if (seancesConsultees(); as consultation) {
-        <section class="consultation carte">
-          <header class="entete-consultation">
-            <h2>Séances de {{ consultation.nom }}</h2>
-            <button type="button" class="lien" (click)="fermerSeances()">Fermer</button>
-          </header>
-
-          @if (consultation.page.content.length === 0) {
-            <p class="vide">Cet utilisateur n'a aucune séance.</p>
-          } @else {
-            <ul class="seances">
-              @for (seance of consultation.page.content; track seance.id) {
-                <li>
-                  <span class="type" [attr.data-type]="seance.type">{{ seance.type }}</span>
-                  <span>{{ seance.dateHeure | date:'dd/MM/yy HH:mm' }}</span>
-                  <span>{{ seance.distanceKm }} km</span>
-                  @if (seance.estPlanifiee) { <span class="planifiee">planifiée</span> }
-                </li>
-              }
-            </ul>
-            <p class="silence">{{ consultation.page.totalElements }} séance(s) au total.</p>
-          }
-        </section>
-      }
-
-      <section>
-        <h2>Trafic par route</h2>
-        @if (routes().length > 0) {
-          <ul class="routes">
-            @for (ligne of routes(); track ligne.route) {
-              <li>
-                <span class="chemin">{{ ligne.route }}</span>
-                <span class="barre"><span [style.width.%]="ligne.pourcentage"></span></span>
-                <span class="valeur">{{ ligne.appels }}</span>
-              </li>
-            }
-          </ul>
-        } @else {
-          <p class="vide">Aucune requête comptabilisée depuis le démarrage.</p>
-        }
-      </section>
-    } @else if (enErreur()) {
-      <p class="vide" role="alert">Données d'administration indisponibles.</p>
-    } @else {
-      <p class="vide" aria-busy="true">Chargement…</p>
-    }
-  `,
-  styles: [`
-    .titre { display: flex; align-items: flex-end; justify-content: space-between;
-             gap: 1rem; flex-wrap: wrap; }
-    .sous-titre { margin: .25rem 0 0; font-size: .88rem; color: var(--texte-doux); }
-
-    .indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-                   gap: 1rem; margin: 1.75rem 0; }
-    .indicateurs > div {
-      position: relative; overflow: hidden;
-      padding: 1.15rem 1.25rem; border-radius: var(--rayon);
-      background: var(--surface); border: 1px solid var(--bordure); box-shadow: var(--ombre-1);
-      transition: transform var(--transition), box-shadow var(--transition);
-    }
-    .indicateurs > div:hover { transform: translateY(-3px); box-shadow: var(--ombre-2); }
-    .indicateurs > div::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
-                                 background: var(--degrade-marque); }
-    dt { font-size: .8rem; color: var(--texte-doux); }
-    dd { margin: .3rem 0 0; font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em;
-         font-variant-numeric: tabular-nums; }
-
-    .filtres { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
-    .filtres .etiquette { margin: 0; white-space: nowrap; }
-    .filtres .champ { max-width: 22rem; }
-
-    table { width: 100%; border-collapse: collapse; background: var(--surface);
-            border: 1px solid var(--bordure); border-radius: var(--rayon);
-            overflow: hidden; box-shadow: var(--ombre-1); }
-    th, td { text-align: left; padding: .75rem 1rem; border-bottom: 1px solid var(--bordure); }
-    tbody tr:last-child td { border-bottom: 0; }
-    tbody tr { transition: background var(--transition); }
-    tbody tr:hover { background: var(--surface-douce); }
-    tbody tr.soi-meme { background: color-mix(in srgb, var(--azur) 5%, transparent); }
-    th { font-size: .78rem; color: var(--texte-doux); text-transform: uppercase;
-         letter-spacing: .04em; background: var(--surface-douce); }
-    .email { color: var(--texte-doux); font-size: .9rem; }
-    .actions { text-align: right; white-space: nowrap; }
-    .lien { background: none; border: 0; padding: .2rem .45rem; margin-left: .2rem;
-            color: var(--azur); font: inherit; font-size: .85rem; cursor: pointer;
-            border-radius: .35rem; transition: background var(--transition); }
-    .lien:hover { background: var(--surface-douce); text-decoration: underline; }
-    .lien.danger { color: var(--danger); }
-
-    .role { display: inline-block; padding: .22rem .6rem; border-radius: 999px;
-            font-size: .72rem; font-weight: 700; letter-spacing: .02em;
-            background: var(--surface-douce); color: var(--texte-doux); }
-    .role[data-role="ADMIN"] { background: rgba(240, 126, 43, .14); color: #c05f16; }
-
-    .consultation { margin: 1.5rem 0; padding: 1.25rem; }
-    .entete-consultation { display: flex; align-items: center; justify-content: space-between; }
-    .entete-consultation h2 { margin: 0; }
-    .seances { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .4rem; }
-    .seances li { display: flex; align-items: center; gap: 1rem; font-size: .9rem;
-                  padding: .5rem 0; border-bottom: 1px solid var(--bordure); }
-    .type { padding: .2rem .5rem; border-radius: 999px; font-size: .68rem; font-weight: 700;
-            background: var(--surface-douce); color: var(--texte-doux); }
-    .planifiee { font-size: .68rem; font-weight: 700; text-transform: uppercase;
-                 color: var(--azur); }
-
-    .routes { list-style: none; padding: 0; display: grid; gap: .65rem; }
-    .routes li { display: grid; grid-template-columns: minmax(9rem, 20rem) 1fr 4rem;
-                 align-items: center; gap: 1rem; }
-    .chemin { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .barre { height: .9rem; background: var(--surface-douce); border: 1px solid var(--bordure);
-             border-radius: 999px; overflow: hidden; }
-    .barre > span { display: block; height: 100%; border-radius: 999px;
-                    background: var(--degrade-marque);
-                    animation: deploiement 620ms cubic-bezier(.2, .8, .3, 1); }
-    @keyframes deploiement { from { width: 0 !important; } }
-    .valeur { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .vide { color: var(--texte-doux); padding: 1.5rem 0; }
-    .pagination { display: flex; align-items: center; gap: 1rem; justify-content: center;
-                  margin-top: 1.25rem; }
-
-    @media (max-width: 46rem) {
-      /*
-         Un tableau à quatre colonnes ne rentre pas sur un téléphone : il
-         débordait de 136 px, mesuré par le test Playwright. Plutôt que de
-         réduire la police jusqu'à l'illisible ou d'imposer un défilement
-         horizontal, chaque ligne devient une CARTE.
-
-         L'en-tête disparaît, donc chaque cellule doit porter son intitulé —
-         d'où l'attribut data-intitule repris ici en ::before.
-      */
-      table, thead, tbody, tr, td { display: block; }
-      thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-      table { border: 0; box-shadow: none; background: none; }
-      tbody tr { margin-bottom: .75rem; padding: .35rem .25rem; border-radius: var(--rayon);
-                 background: var(--surface); border: 1px solid var(--bordure);
-                 box-shadow: var(--ombre-1); }
-      td { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-           padding: .5rem .85rem; border-bottom: 0; }
-      td[data-intitule]::before {
-        content: attr(data-intitule);
-        font-size: .68rem; font-weight: 700; letter-spacing: .04em;
-        text-transform: uppercase; color: var(--texte-doux);
-      }
-      .email { word-break: break-all; text-align: right; }
-      .actions { justify-content: flex-start; flex-wrap: wrap; gap: .25rem;
-                 border-top: 1px solid var(--bordure); margin-top: .25rem; }
-      .lien { margin-left: 0; }
-
-      .routes li { grid-template-columns: 1fr 3.5rem; }
-      .barre { grid-column: 1 / -1; }
-      .chemin { word-break: break-all; white-space: normal; }
-      .filtres { flex-wrap: wrap; }
-      .filtres .champ { max-width: 100%; }
-    }
-  `]
+    selector: 'app-administration',
+    imports: [ReactiveFormsModule, DatePipe, TableModule, ButtonModule, InputTextModule, TagModule,
+      DialogModule, PasswordModule, TooltipModule, SelectModule,
+      IconFieldModule, InputIconModule],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    templateUrl: './administration.component.html',
+    styleUrl: './administration.component.scss'
 })
 export class AdministrationComponent {
 
   private readonly service = inject(AdminService);
   private readonly notifications = inject(NotificationService);
+  private readonly hote = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly referentiel = inject(PaysService);
   protected readonly auth = inject(AuthService);
 
   protected readonly recherche = new FormControl('', { nonNullable: true });
   private readonly page$ = new BehaviorSubject<number>(0);
+
+  /**
+   * Nombre de lignes par page, ajustable par l'administrateur.
+   *
+   * ⚠️ Déclaré AVANT le flux qui le lit : les champs s'initialisent dans
+   * l'ordre où ils sont écrits, et le placer plus bas donnait « Property
+   * 'taille$' is used before its initialization ».
+   *
+   * Dix par défaut : au-delà, le tableau dépasse la hauteur d'un écran et l'on
+   * perd les en-têtes de colonnes en défilant.
+   */
+  private readonly taille$ = new BehaviorSubject<number>(10);
+
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ TRI SERVEUR, et non tri de la page affichée                           │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * La table est en mode `lazy` : elle n'a qu'UNE page en mémoire. Trier
+   * localement classerait dix lignes sur quarante et donnerait un ordre faux
+   * dès la seconde page. Le critère part donc au serveur, au format Spring
+   * Data `propriété,sens` — le même que celui du tri des séances.
+   */
+  private readonly tri$ = new BehaviorSubject<string>('nom,asc');
+
+  /** Reflète l'état des icônes de tri dans les en-têtes. */
+  protected readonly champTri = signal<string>('nom');
+  protected readonly sensTri = signal<number>(1);
   private readonly declencheur$ = new BehaviorSubject<void>(undefined);
 
   protected readonly seancesConsultees =
@@ -310,12 +121,14 @@ export class AdministrationComponent {
         distinctUntilChanged()
       ),
       this.page$,
+      this.tri$,
+      this.taille$,
       this.declencheur$
     ]).pipe(
-      switchMap(([recherche, page]) =>
+      switchMap(([recherche, page, tri, taille]) =>
         forkJoin({
           utilisateurs: this.service.utilisateurs({
-            page, taille: 10, tri: 'nom', recherche
+            page, taille, tri, recherche
           }),
           metriques: this.service.metriques()
         }).pipe(
@@ -337,6 +150,38 @@ export class AdministrationComponent {
   });
 
   protected readonly enErreur = computed(() => this.etat().statut === 'erreur');
+
+  /** p-table attend un tableau mutable ; la page Spring Data est readonly. */
+  /**
+   * Sélection courante. Signal côté composant, mais p-table travaille avec une
+   * propriété ordinaire : `selectionTable` fait le pont dans les deux sens.
+   */
+  protected readonly selection = signal<readonly UtilisateurResume[]>([]);
+  protected readonly suppressionEnMasse = signal(false);
+
+  protected get selectionTable(): UtilisateurResume[] {
+    return [...this.selection()];
+  }
+
+  protected set selectionTable(valeur: UtilisateurResume[]) {
+    this.selection.set(valeur);
+  }
+
+  /**
+   * ⚠️ Son PROPRE compte n'est jamais sélectionnable.
+   *
+   * Le serveur le refuserait de toute façon (motif AUTO_SUPPRESSION), mais
+   * offrir la case reviendrait à proposer une action vouée à l'échec — et à
+   * faire compter dans « 3 comptes sélectionnés » un compte qui ne partira pas.
+   * La méthode est passée à `rowSelectable`, ce qui exclut aussi la ligne de la
+   * case « tout sélectionner ».
+   */
+  protected readonly ligneSelectionnable = (evenement: { data: UtilisateurResume }) =>
+    !this.estSoiMeme(evenement.data);
+
+  protected readonly lignesUtilisateurs = computed(
+    () => [...(this.donnees()?.utilisateurs.content ?? [])]
+  );
 
   protected readonly nombreAdmins = computed(
     () => this.donnees()?.utilisateurs.content.filter(u => u.role === 'ADMIN').length ?? 0
@@ -363,6 +208,12 @@ export class AdministrationComponent {
       .sort((a, b) => b.appels - a.appels);
   });
 
+  protected readonly libelleType = libelleType;
+
+  protected libelleRole(role: Role): string {
+    return LIBELLES_ROLE[role];
+  }
+
   protected estSoiMeme(utilisateur: UtilisateurResume): boolean {
     return utilisateur.email === this.auth.utilisateur()?.email;
   }
@@ -372,7 +223,7 @@ export class AdministrationComponent {
 
     this.service.changerRole(utilisateur.id, cible).subscribe({
       next: () => {
-        this.notifications.succes(`${utilisateur.nom} est désormais ${cible}.`);
+        this.notifications.succes(`${utilisateur.nom} est désormais ${LIBELLES_ROLE[cible]}.`);
         this.rafraichir();
       },
       error: (erreur: HttpErrorResponse) => this.signalerRefus(erreur)
@@ -380,24 +231,56 @@ export class AdministrationComponent {
   }
 
   protected supprimer(utilisateur: UtilisateurResume): void {
-    // Action irréversible qui emporte aussi les séances : on confirme
-    if (!confirm(`Supprimer définitivement ${utilisateur.nom} et toutes ses séances ?`)) {
-      return;
-    }
-
-    this.service.supprimer(utilisateur.id).subscribe({
-      next: () => {
-        this.notifications.succes(`${utilisateur.nom} a été supprimé.`);
-        this.rafraichir();
-      },
-      error: (erreur: HttpErrorResponse) => this.signalerRefus(erreur)
+    // Action irréversible qui emporte aussi les séances : on confirme, et le
+    // message NOMME le compte visé — une boîte générique ne protège de rien
+    // quand la ligne cliquée n'est plus visible derrière le dialogue.
+    this.confirmation.confirm({
+      header: 'Supprimer ce compte ?',
+      message: `${utilisateur.nom} (${utilisateur.email}) et toutes ses séances `
+        + `seront effacés définitivement.`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Supprimer le compte',
+      rejectLabel: 'Annuler',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: () => {
+        this.service.supprimer(utilisateur.id).subscribe({
+          next: () => {
+            this.notifications.succes(`${utilisateur.nom} a été supprimé.`);
+            this.rafraichir();
+          },
+          error: (erreur: HttpErrorResponse) => this.signalerRefus(erreur)
+        });
+      }
     });
   }
 
   protected voirSeances(utilisateur: UtilisateurResume): void {
     this.service.seancesDe(utilisateur.id).subscribe({
-      next: (page) => this.seancesConsultees.set({ nom: utilisateur.nom, page }),
+      next: (page) => {
+        this.seancesConsultees.set({ nom: utilisateur.nom, page });
+        this.revelerConsultation();
+      },
       error: () => this.notifications.erreur('Séances indisponibles.')
+    });
+  }
+
+  /**
+   * Le panneau s'ouvrait SOUS la ligne de flottaison, sans rien déplacer :
+   * sur mobile, cliquer « Séances » ne produisait visiblement aucun effet.
+   * On l'amène à l'écran et on y pose le focus.
+   *
+   * Le `setTimeout` attend le rendu : le panneau est derrière un `@if`, il
+   * n'existe pas encore dans le DOM à l'instant où le signal est écrit.
+   * Le défilement doux est conditionné à la préférence système — une
+   * animation de défilement non désirée peut provoquer un malaise.
+   */
+  private revelerConsultation(): void {
+    setTimeout(() => {
+      const titre = this.hote.nativeElement.querySelector<HTMLElement>('#titre-consultation');
+      const doux = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      titre?.scrollIntoView({ behavior: doux ? 'smooth' : 'auto', block: 'center' });
+      titre?.focus();
     });
   }
 
@@ -405,8 +288,236 @@ export class AdministrationComponent {
     this.seancesConsultees.set(undefined);
   }
 
-  protected allerPage(numero: number): void {
-    this.page$.next(Math.max(0, numero));
+  /**
+   * Suppression groupée. Le compte rendu du serveur est PARTIEL par nature :
+   * on l'affiche tel quel plutôt que d'annoncer un succès global qui serait
+   * faux dès qu'un compte est refusé.
+   */
+  // ─────────────────── Édition d'un compte ───────────────────
+
+  /** Copie mutable : p-select refuse un tableau readonly. */
+  protected readonly pays = toSignal(
+    this.referentiel.tous().pipe(map(liste => [...liste])),
+    { initialValue: [] as Pays[] }
+  );
+
+  protected readonly enEdition = signal<UtilisateurResume | undefined>(undefined);
+  protected readonly editionEnCours = signal(false);
+  protected readonly mdpAdminEnCours = signal(false);
+
+  private readonly fb = inject(FormBuilder);
+
+  protected readonly formulaireEdition = this.fb.nonNullable.group({
+    nom: ['', [Validators.required, Validators.maxLength(100)]],
+    villeParDefaut: ['', [Validators.required, Validators.maxLength(100)]],
+    pays: ['France', [Validators.required, Validators.maxLength(100)]]
+  });
+
+  protected readonly formulaireMdpAdmin = this.fb.nonNullable.group({
+    nouveau: ['', [Validators.required, Validators.minLength(5)]]
+  });
+
+  /**
+   * Changer de pays vide la ville — la même règle que sur les autres écrans :
+   * une ville appartient à son pays, et la conserver après un changement
+   * produirait une adresse de référence sans lieu réel.
+   *
+   * ⚠️ Sur `onChange`, jamais sur `valueChanges` : le second se déclencherait
+   * à l'ouverture de la boîte, quand on remplit le formulaire avec les valeurs
+   * du compte — et effacerait la ville qu'on vient d'y mettre.
+   *
+   * Le formulaire devient invalide, ce que le message « Le nom et la ville
+   * sont obligatoires » signale déjà sous les champs.
+   */
+  protected changerPays(): void {
+    this.formulaireEdition.controls.villeParDefaut.setValue('');
+  }
+
+  protected ouvrirEdition(utilisateur: UtilisateurResume): void {
+    // Le formulaire s'ouvre sur les valeurs RÉELLES du compte : une ville vide
+    // obligeait à la ressaisir de mémoire, ou l'écrasait sans le vouloir.
+    this.formulaireEdition.reset({
+      nom: utilisateur.nom,
+      villeParDefaut: utilisateur.villeParDefaut,
+      pays: utilisateur.pays
+    });
+    this.formulaireMdpAdmin.reset({ nouveau: '' });
+    this.enEdition.set(utilisateur);
+  }
+
+  protected fermerEdition(): void {
+    this.enEdition.set(undefined);
+  }
+
+  protected enregistrerEdition(): void {
+    const cible = this.enEdition();
+    if (!cible || this.formulaireEdition.invalid) {
+      this.formulaireEdition.markAllAsTouched();
+      return;
+    }
+
+    const { nom, villeParDefaut, pays } = this.formulaireEdition.getRawValue();
+    this.editionEnCours.set(true);
+    this.service.modifierUtilisateur(cible.id, nom, villeParDefaut, pays).subscribe({
+      next: () => {
+        this.editionEnCours.set(false);
+        this.notifications.succes('Compte modifié.');
+        this.fermerEdition();
+        this.rafraichir();
+      },
+      error: (erreur: HttpErrorResponse) => {
+        this.editionEnCours.set(false);
+        this.signalerRefus(erreur);
+      }
+    });
+  }
+
+  protected reinitialiserMotDePasse(): void {
+    const cible = this.enEdition();
+    if (!cible || this.formulaireMdpAdmin.invalid) {
+      this.formulaireMdpAdmin.markAllAsTouched();
+      return;
+    }
+
+    this.mdpAdminEnCours.set(true);
+    this.service.reinitialiserMotDePasse(cible.id, this.formulaireMdpAdmin.getRawValue().nouveau)
+      .subscribe({
+        next: () => {
+          this.mdpAdminEnCours.set(false);
+          this.formulaireMdpAdmin.reset({ nouveau: '' });
+          this.notifications.succes('Mot de passe réinitialisé.');
+        },
+        error: (erreur: HttpErrorResponse) => {
+          this.mdpAdminEnCours.set(false);
+          this.signalerRefus(erreur);
+        }
+      });
+  }
+
+  /**
+   * Le BLOCAGE est confirmé, le déblocage non : suspendre l'accès de quelqu'un
+   * mérite un temps d'arrêt, le lui rendre ne casse rien.
+   */
+  protected basculerBlocage(utilisateur: UtilisateurResume): void {
+    const appliquer = () => this.service.bloquer(utilisateur.id, !utilisateur.actif).subscribe({
+      next: () => {
+        this.notifications.succes(
+          utilisateur.actif ? `${utilisateur.nom} est bloqué.` : `${utilisateur.nom} est débloqué.`);
+        this.rafraichir();
+      },
+      error: (erreur: HttpErrorResponse) => this.signalerRefus(erreur)
+    });
+
+    if (!utilisateur.actif) {
+      appliquer();
+      return;
+    }
+
+    this.confirmation.confirm({
+      header: 'Bloquer ce compte ?',
+      message: `${utilisateur.nom} (${utilisateur.email}) ne pourra plus se connecter. `
+        + `Ses séances sont conservées et le blocage est réversible.`,
+      icon: 'pi pi-ban',
+      acceptLabel: 'Bloquer',
+      rejectLabel: 'Annuler',
+      acceptButtonStyleClass: 'p-button-warn',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: appliquer
+    });
+  }
+
+  protected supprimerSelection(): void {
+    const cibles = this.selection();
+    if (cibles.length === 0) {
+      return;
+    }
+
+    this.confirmation.confirm({
+      header: `Supprimer ${cibles.length} compte(s) ?`,
+      // Les emails sont ÉNUMÉRÉS jusqu'à cinq : « 3 comptes » ne permet pas de
+      // vérifier qu'on a coché ce que l'on croit. Au-delà, la liste devient
+      // illisible et le compte suffit.
+      message: cibles.length <= 5
+        ? `${cibles.map(c => c.email).join(', ')} et toutes leurs séances seront `
+          + `effacés définitivement.`
+        : `${cibles.length} comptes et toutes leurs séances seront effacés `
+          + `définitivement.`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Supprimer la sélection',
+      rejectLabel: 'Annuler',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: () => {
+        this.suppressionEnMasse.set(true);
+        this.service.supprimerPlusieurs(cibles.map(c => c.id)).subscribe({
+          next: (rapport) => {
+            this.suppressionEnMasse.set(false);
+            this.selection.set([]);
+            this.rendreCompte(rapport);
+            this.rafraichir();
+          },
+          error: (erreur: HttpErrorResponse) => {
+            this.suppressionEnMasse.set(false);
+            this.signalerRefus(erreur);
+          }
+        });
+      }
+    });
+  }
+
+  /** Un succès et un refus dans le même lot : deux messages, pas un compromis. */
+  private rendreCompte(rapport: RapportSuppression): void {
+    if (rapport.supprimes.length > 0) {
+      this.notifications.succes(`${rapport.supprimes.length} compte(s) supprimé(s).`);
+    }
+    for (const refus of rapport.refuses) {
+      this.notifications.erreur(refus.detail);
+    }
+  }
+
+  /**
+   * p-table émet `field` et `order` (1 croissant, -1 décroissant).
+   *
+   * ⚠️ Le tri REMET À LA PREMIÈRE PAGE. Sans cela, trier depuis la page 3
+   * affiche la page 3 du nouvel ordre : l'utilisateur a demandé « les noms de
+   * A à Z » et reçoit une tranche arbitraire du milieu. Le test de garde vaut
+   * pour la recherche exactement de la même façon.
+   */
+  protected trier(evenement: { field?: string; order?: number }): void {
+    const champ = evenement.field ?? 'nom';
+    const ordre = evenement.order ?? 1;
+    const critere = `${champ},${ordre === -1 ? 'desc' : 'asc'}`;
+    if (critere === this.tri$.value) {
+      return;                       // p-table réémet à chaque rendu
+    }
+    this.champTri.set(champ);
+    this.sensTri.set(ordre);
+    this.tri$.next(critere);
+    this.revenirPremierePage();
+  }
+
+  /** Idempotent : republier 0 alors qu'on y est relancerait une requête. */
+  private revenirPremierePage(): void {
+    if (this.page$.value !== 0) {
+      this.page$.next(0);
+    }
+  }
+
+  /**
+   * Le paginateur émet un PREMIER ÉLÉMENT et un nombre de lignes ; Spring Data
+   * raisonne en numéro de page. La conversion se fait ici, une fois.
+   *
+   * ⚠️ Changer le nombre de lignes REMET à la première page. Passer de 10 à 50
+   * en étant sur la page 3 demanderait les lignes 100 à 150 d'un jeu qui n'en
+   * compte plus que deux pages : l'écran reviendrait vide.
+   */
+  protected allerPage(premier: number, lignes: number): void {
+    if (lignes !== this.taille$.value) {
+      this.taille$.next(lignes);
+      this.page$.next(0);
+      return;
+    }
+    this.page$.next(Math.max(0, Math.floor(premier / lignes)));
   }
 
   protected rafraichir(): void {
@@ -421,5 +532,29 @@ export class AdministrationComponent {
   private signalerRefus(erreur: HttpErrorResponse): void {
     const detail = erreur.status === 422 ? erreur.error?.detail : null;
     this.notifications.erreur(detail ?? 'Opération impossible.');
+  }
+
+  protected readonly exportEnCours = signal(false);
+
+  /**
+   * Le refus d'un export ne doit pas passer inaperçu.
+   *
+   * ⚠️ `erreur.interceptor` laisse remonter les statuts métier, mais un échec
+   * de téléchargement n'affiche RIEN par lui-même : sans ce `error`,
+   * l'utilisateur verrait le bouton tourner puis s'arrêter, sans fichier et
+   * sans explication.
+   */
+  protected exporter(): void {
+    this.exportEnCours.set(true);
+    this.service.exporterPdf().subscribe({
+      next: (fichier) => {
+        telecharger(fichier, nomDuJour('utilisateurs'));
+        this.exportEnCours.set(false);
+      },
+      error: () => {
+        this.exportEnCours.set(false);
+        this.notifications.erreur("L'export n'a pas pu être généré.");
+      }
+    });
   }
 }

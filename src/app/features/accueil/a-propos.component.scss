@@ -1,0 +1,63 @@
+:host { display: block; }
+
+.entete { text-align: center; padding: clamp(.5rem, 3vw, 1.5rem) 0 0; }
+.entete h1 {
+  font-size: clamp(1.7rem, 1.2rem + 2vw, 2.4rem);
+  background: var(--degrade-marque);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.accroche {
+  color: var(--texte-doux); max-width: 42rem; margin: .6rem auto 0; text-align: center;
+}
+
+.bloc { margin-top: clamp(2rem, 5vw, 3rem); }
+.bloc > h2 { text-align: center; font-size: clamp(1.15rem, 1rem + .7vw, 1.5rem); }
+.bloc.carte { padding: clamp(1.25rem, 3vw, 1.75rem); }
+.bloc.carte > h2 { margin-top: 0; }
+.bloc p { color: var(--texte-doux); }
+
+.reperes {
+  list-style: none; padding: 0; margin: 1.25rem 0 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem; text-align: center;
+}
+.reperes strong {
+  display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums;
+  color: var(--pastille-azur-texte);
+}
+.reperes li { font-size: .82rem; color: var(--texte-doux); }
+
+/* Deux moitiés, deux colonnes : un diviseur de deux, jamais d'orpheline. */
+.grille-piles { display: grid; gap: 1rem; grid-template-columns: repeat(2, 1fr); margin-top: 1.25rem; }
+/* Quatre partis pris : 2×2 pour la même raison. */
+.grille-choix { display: grid; gap: 1rem; grid-template-columns: repeat(2, 1fr); margin-top: 1.25rem; }
+
+@media (max-width: 46rem) {
+  .grille-piles, .grille-choix { grid-template-columns: 1fr; }
+}
+
+.pile { padding: 1.35rem; }
+.pile header {
+  display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--bordure); padding-bottom: .6rem; margin-bottom: .85rem;
+}
+.pile h3 { margin: 0; font-size: 1.05rem; }
+.pile code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .74rem;
+  padding: .12rem .4rem; border-radius: .35rem;
+  background: var(--surface-douce); color: var(--texte-doux);
+}
+.pile dl { margin: 0; display: grid; gap: .7rem; }
+.pile dt { font-weight: 600; font-size: .92rem; }
+.pile dd { margin: .1rem 0 0; color: var(--texte-doux); font-size: .85rem; }
+
+.choix { padding: 1.35rem; }
+.choix h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.choix p { margin: 0; font-size: .9rem; }
+
+.donnees p + p { margin-bottom: 0; }
+
+.appel { text-align: center; }
+.appel .actions {
+  display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;
+}

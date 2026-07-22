@@ -1,0 +1,92 @@
+<section class="entete">
+  <h1>À propos de KayeDaw</h1>
+  <p class="accroche">
+    Un carnet d'entraînement complet — et un support de préparation à un
+    entretien : chaque mécanisme y est choisi pour une raison écrite dans le
+    code, à côté du code.
+  </p>
+</section>
+
+<section class="bloc carte">
+  <h2>Ce que fait l'application</h2>
+  <p>
+    On saisit une distance, une durée, un lieu et un moment. L'allure et la
+    vitesse sont calculées, la météo est retrouvée toute seule — celle de
+    l'heure exacte, pas celle du jour en moyenne — puis figée avec la séance.
+    Une sortie peut être posée jusqu'à {{ horizonJours }} jours à l'avance,
+    avec la prévision du créneau visé.
+  </p>
+  <ul class="reperes">
+    <li><strong>{{ nombreTypes }}</strong> types de séance</li>
+    <li><strong>{{ horizonJours }}</strong> jours de planification</li>
+    <li><strong>{{ plafondKm }}</strong> km / semaine, plafond de sécurité</li>
+    @if (nombrePays() > 0) {
+      <li><strong>{{ nombrePays() }}</strong> pays couverts</li>
+    }
+  </ul>
+</section>
+
+<!--
+  La pile est donnée par MOITIÉ, avec la raison en regard : une liste de
+  dépendances ne dit pas ce qu'on a arbitré, et c'est l'arbitrage qui
+  s'explique en entretien.
+-->
+<section class="bloc">
+  <h2>La pile, et pourquoi</h2>
+  <div class="grille-piles">
+    @for (pile of piles; track pile.cote) {
+      <article class="carte pile">
+        <header>
+          <h3>{{ pile.cote }}</h3>
+          <code translate="no">{{ pile.depot }}</code>
+        </header>
+        <dl>
+          @for (ligne of pile.lignes; track ligne.quoi) {
+            <div>
+              <dt>{{ ligne.quoi }}</dt>
+              <dd>{{ ligne.pourquoi }}</dd>
+            </div>
+          }
+        </dl>
+      </article>
+    }
+  </div>
+</section>
+
+<section class="bloc">
+  <h2>Quatre partis pris</h2>
+  <div class="grille-choix">
+    @for (item of choix; track item.titre) {
+      <article class="carte choix">
+        <h3>{{ item.titre }}</h3>
+        <p>{{ item.texte }}</p>
+      </article>
+    }
+  </div>
+</section>
+
+<section class="bloc carte donnees">
+  <h2>Vos données</h2>
+  <p>
+    La base est <strong>en mémoire</strong> : tout est effacé à chaque
+    redémarrage du serveur, comptes compris. C'est une démonstration, pas un
+    service. Supprimer un compte emporte ses séances et ses préférences — un
+    test interroge le schéma réel pour qu'aucune table liée n'y échappe le
+    jour où elle sera ajoutée.
+  </p>
+  <p class="silence">
+    Les données météo proviennent de Météo-France (observations) et
+    d'Open-Meteo (archives, prévisions, géocodage, qualité de l'air).
+  </p>
+</section>
+
+<section class="bloc appel">
+  <h2>Essayer</h2>
+  <p>Deux comptes de démonstration sont recréés à chaque démarrage du serveur.</p>
+  <div class="actions">
+    <a pButton routerLink="/connexion">
+      <i class="pi pi-sign-in" aria-hidden="true"></i> Se connecter
+    </a>
+    <a pButton routerLink="/" severity="secondary" [outlined]="true">Retour à l'accueil</a>
+  </div>
+</section>

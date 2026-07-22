@@ -1,0 +1,203 @@
+<!--
+  ┌───────────────────────────────────────────────────────────────────────────┐
+  │ MONTRER LE PRODUIT, PAS SEULEMENT LE DÉCRIRE                              │
+  └───────────────────────────────────────────────────────────────────────────┘
+
+  La bannière tenait en une colonne centrée : logo, titre, accroche, boutons,
+  chiffres — cinq blocs empilés au milieu d'un écran large, et pas une seule
+  image de ce que fait l'application. On lisait une promesse sans jamais voir
+  l'objet.
+
+  Elle passe donc sur deux colonnes : l'argument à gauche, une carte de séance
+  à droite, bâtie avec les mêmes jetons et les mêmes étiquettes que l'écran
+  réel — donc fidèle sans être une capture qui se périmerait.
+
+  ⚠️ Elle porte la mention « Exemple » et `aria-hidden` : une donnée
+  d'illustration qui aurait l'air d'un enregistrement authentique tromperait
+  sur ce qu'on regarde, et un lecteur d'écran n'a rien à faire d'une vignette
+  décorative.
+-->
+<section class="banniere">
+  <div class="argument">
+    <img src="assets/logo.png" alt="KayeDaw" width="260" height="142" class="logo" />
+    <h1>Chaque foulée compte.</h1>
+    <p class="accroche">
+      Un carnet d'entraînement qui calcule vos allures et va chercher la météo
+      à votre place — celle du jour et de l'heure où vous avez couru.
+    </p>
+
+    <div class="actions">
+      <!--
+        <a pButton> et non <p-button routerLink> : une NAVIGATION doit être un
+        lien. p-button rend un <button>, ce qui supprime le clic milieu,
+        l'ouverture dans un nouvel onglet, l'aperçu de la cible dans la barre
+        d'état, et fait annoncer « bouton » là où un lecteur d'écran attend
+        « lien ».
+
+        Les appels à l'action suivent la SESSION : proposer « Créer un compte »
+        à qui en a déjà un ne veut rien dire.
+      -->
+      @if (auth.estConnecte()) {
+        <a pButton [routerLink]="accueilDuRole()" class="p-button-lg">
+          <i class="pi pi-arrow-right" aria-hidden="true"></i> {{ libelleAccueilDuRole() }}
+        </a>
+        @if (!auth.estAdmin()) {
+          <a pButton routerLink="/seances/nouvelle" severity="secondary" [outlined]="true"
+             class="p-button-lg">Nouvelle séance</a>
+        }
+      } @else {
+        <a pButton routerLink="/inscription" class="p-button-lg">
+          <i class="pi pi-user-plus" aria-hidden="true"></i> Créer un compte
+        </a>
+        <a pButton routerLink="/connexion" severity="secondary" [outlined]="true"
+           class="p-button-lg">J'ai déjà un compte</a>
+      }
+    </div>
+
+    @if (!auth.estConnecte()) {
+      <p class="rassurance">
+        <i class="pi pi-check-circle" aria-hidden="true"></i>
+        Gratuit · sans carte bancaire · deux comptes de démonstration prêts à l'emploi
+      </p>
+    }
+  </div>
+
+  <div class="demonstration-visuelle" aria-hidden="true">
+    <article class="carte apercu-seance">
+      <header>
+        <span class="etiquette-type" data-type="ENDURANCE">Endurance</span>
+        <span class="marque-exemple">Exemple</span>
+      </header>
+      <p class="quand">Samedi 18 juillet, 07 h 30 · Lille, France</p>
+      <!--
+        ⚠️ Les quatre valeurs sont COHÉRENTES entre elles : 12,4 km en 1 h 02
+        donnent bien 5'00"/km et 12 km/h. Une vitrine qui affiche des chiffres
+        qui ne tombent pas juste se fait prendre par le premier lecteur qui
+        vérifie — et c'est justement le lecteur qu'on cherche à convaincre.
+
+        Allure ET vitesse côte à côte, comme sur l'écran réel : l'allure se lit
+        à l'envers de l'intuition — plus elle est basse, plus on va vite — et
+        les voir ensemble lève l'ambiguïté sans avoir à l'expliquer.
+      -->
+      <dl class="mesures">
+        <div><dt>Distance</dt><dd>12,4 <small>km</small></dd></div>
+        <div><dt>Durée</dt><dd>1 h 02</dd></div>
+        <div><dt>Allure</dt><dd>5'00"<small>/km</small></dd></div>
+        <div><dt>Vitesse</dt><dd>12 <small>km/h</small></dd></div>
+      </dl>
+      <div class="meteo-exemple">
+        <span class="titre-meteo">Conditions relevées</span>
+        <ul>
+          <li><span aria-hidden="true">🌡️</span> 18,4 °C</li>
+          <li><span aria-hidden="true">💨</span> 11 km/h</li>
+          <li><span aria-hidden="true">🌧️</span> 0 mm</li>
+        </ul>
+        <span class="origine">Observations Météo-France</span>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- Bandeau de chiffres : une rupture visuelle entre l'accroche et le détail. -->
+<section class="bande-chiffres">
+  <ul class="chiffres">
+    <li><strong>{{ types.length }}</strong><span>types de séance</span></li>
+    <li><strong>{{ horizonJours }}</strong><span>jours de planification</span></li>
+    <li><strong>{{ plafondKm }}</strong><span>km / semaine, plafond de sécurité</span></li>
+    @if (nombrePays() > 0) {
+      <li><strong>{{ nombrePays() }}</strong><span>pays couverts</span></li>
+    }
+  </ul>
+</section>
+
+<section class="atouts">
+  <h2>Ce que KayeDaw fait pour vous</h2>
+  <div class="grille">
+    @for (atout of atouts; track atout.titre) {
+      <article class="carte atout">
+        <span class="pictogramme" aria-hidden="true"><i [class]="atout.icone"></i></span>
+        <h3>{{ atout.titre }}</h3>
+        <p>{{ atout.texte }}</p>
+      </article>
+    }
+  </div>
+</section>
+
+<section class="meteo">
+  <h2>Trois sources, choisies pour vous</h2>
+  <p class="sous-titre">
+    La bonne source dépend de la date et du lieu. L'application tranche seule,
+    et vous dit toujours laquelle a répondu.
+  </p>
+  <div class="grille-sources">
+    @for (source of sources; track source.nom) {
+      <article class="carte source">
+        <p-tag [value]="source.quand" severity="secondary" />
+        <h3>{{ source.nom }}</h3>
+        <p>{{ source.detail }}</p>
+      </article>
+    }
+  </div>
+</section>
+
+<section class="types">
+  <h2>Vos séances, vos repères</h2>
+  <p class="sous-titre">
+    Chaque type porte ses propres valeurs par défaut de distance et de durée.
+    Réglez-les une fois, le formulaire s'en souvient.
+  </p>
+  <ul class="liste-types">
+    @for (type of types; track type.valeur) {
+      <li class="etiquette-type" [attr.data-type]="type.valeur">{{ type.libelle }}</li>
+    }
+  </ul>
+</section>
+
+<!--
+  Comptes de démonstration affichés SUR la page d'accueil : ce dépôt est une
+  vitrine, et un visiteur doit pouvoir entrer sans créer de compte. Ces
+  identifiants sont déjà publics — ils sont écrits dans le README et recréés à
+  chaque démarrage du backend, sur une base en mémoire.
+-->
+<section class="demonstration carte">
+  <!-- Le titre change avec la session : « essayer sans s'inscrire » n'a aucun
+       sens pour qui est déjà entré, alors que les identifiants restent utiles
+       — ne serait-ce que pour passer sur le compte administrateur. -->
+  <h2>{{ auth.estConnecte() ? 'Comptes de démonstration' : "Essayer sans s'inscrire" }}</h2>
+  <p>Deux comptes sont recréés à chaque démarrage du serveur.</p>
+  <dl>
+    <div>
+      <dt>Membre</dt>
+      <dd translate="no"><code>user&#64;kayedaw.fr</code> · <code>12345</code></dd>
+    </div>
+    <div>
+      <dt>Administrateur</dt>
+      <dd translate="no"><code>admin&#64;kayedaw.fr</code> · <code>12345</code></dd>
+    </div>
+  </dl>
+  @if (!auth.estConnecte()) {
+    <a pButton routerLink="/connexion" severity="secondary">
+      <i class="pi pi-sign-in" aria-hidden="true"></i> Se connecter
+    </a>
+  }
+</section>
+
+<!--
+  La pile technique quitte la carte de démonstration, qui portait trois
+  messages à elle seule : identifiants, technologies et lien. Un pied de page
+  est sa place — on y descend quand on cherche, pas quand on lit.
+-->
+<footer class="pied">
+  <div class="pile-resume">
+    <h3>Construit avec</h3>
+    <ul class="jetons" translate="no">
+      @for (outil of pile; track outil) {
+        <li>{{ outil }}</li>
+      }
+    </ul>
+  </div>
+  <p class="mention">
+    Base <strong>en mémoire</strong> : tout repart de zéro à chaque redémarrage
+    du serveur. <a routerLink="/a-propos">Les choix techniques en détail ›</a>
+  </p>
+</footer>

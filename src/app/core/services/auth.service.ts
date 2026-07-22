@@ -40,15 +40,35 @@ export class AuthService {
   readonly estAdmin = computed(() => this._utilisateur()?.role === 'ADMIN');
   /** Ville de référence, utilisée pour pré-remplir les formulaires de séance. */
   readonly villeParDefaut = computed(() => this._utilisateur()?.villeParDefaut ?? '');
+  /** Pays du compte : il lève l'homonymie au géocodage des villes. */
+  readonly pays = computed(() => this._utilisateur()?.pays ?? 'France');
 
   readonly initiales = computed(() => {
     const nom = this._utilisateur()?.nom ?? '';
     return nom.split(' ').map(m => m.charAt(0)).join('').toUpperCase().slice(0, 2);
   });
 
+  /**
+   * ┌───────────────────────────────────────────────────────────────────────┐
+   * │ L'INSCRIPTION N'OUVRE PAS DE SESSION                                  │
+   * └───────────────────────────────────────────────────────────────────────┘
+   *
+   * Le jeton renvoyé par l'API est délibérément IGNORÉ ici — pas de
+   * `enregistrerSession`. L'utilisateur repasse par l'écran de connexion.
+   *
+   * Pourquoi renoncer à la commodité de l'auto-connexion :
+   *   - saisir soi-même ses identifiants juste après les avoir choisis les
+   *     ancre, et vérifie immédiatement qu'ils fonctionnent — plutôt que de
+   *     s'en apercevoir à la session suivante ;
+   *   - sur un poste partagé, une inscription faite pour quelqu'un d'autre
+   *     n'ouvre pas sa session à son insu.
+   *
+   * Le contrat de l'API n'est PAS modifié : elle continue de renvoyer un
+   * jeton, dont les tests de bout en bout se servent pour préparer un compte
+   * sans passer par l'écran.
+   */
   inscrire(requete: InscriptionRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>('/api/auth/inscription', requete)
-      .pipe(tap(reponse => this.enregistrerSession(reponse)));
+    return this.http.post<AuthResponse>('/api/auth/inscription', requete);
   }
 
   connecter(requete: ConnexionRequest): Observable<AuthResponse> {
@@ -71,12 +91,12 @@ export class AuthService {
    * prochaine reconnexion — le jeton, lui, n'a pas besoin d'être réémis :
    * il ne porte que l'email et le rôle.
    */
-  rafraichirProfil(nom: string, villeParDefaut: string): void {
+  rafraichirProfil(nom: string, villeParDefaut: string, pays?: string): void {
     const courant = this._utilisateur();
     if (!courant) {
       return;
     }
-    const misAJour: Utilisateur = { ...courant, nom, villeParDefaut };
+    const misAJour: Utilisateur = { ...courant, nom, villeParDefaut, pays: pays ?? courant.pays };
     localStorage.setItem(AuthService.CLE_UTILISATEUR, JSON.stringify(misAJour));
     this._utilisateur.set(misAJour);
   }
@@ -92,7 +112,8 @@ export class AuthService {
       email: reponse.email,
       nom: reponse.nom,
       role: reponse.role,
-      villeParDefaut: reponse.villeParDefaut
+      villeParDefaut: reponse.villeParDefaut,
+      pays: reponse.pays ?? 'France'
     };
     localStorage.setItem(AuthService.CLE_UTILISATEUR, JSON.stringify(utilisateur));
     this._utilisateur.set(utilisateur);

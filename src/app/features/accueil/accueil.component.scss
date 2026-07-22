@@ -1,0 +1,227 @@
+:host { display: block; }
+
+/* ── Bannière sur deux colonnes ────────────────────────────────────────────
+   L'argument à gauche, la démonstration à droite. `align-items: center` cale
+   la carte sur le milieu du bloc de texte, sinon elle flotte en haut d'une
+   colonne bien plus haute qu'elle. */
+.banniere {
+  display: grid; grid-template-columns: 1.05fr .95fr;
+  gap: clamp(1.5rem, 5vw, 3.5rem); align-items: center;
+  /* Pas de marge basse : `section + section` en pose déjà une, et les deux
+     cumulées creusaient un vide de cent pixels sous la bannière. */
+  padding: clamp(1rem, 4vw, 2.5rem) 0 0;
+}
+.argument { animation: apparition 500ms cubic-bezier(.2, .8, .3, 1); }
+
+.logo { width: min(13rem, 55%); height: auto; margin-bottom: 1rem; }
+/* Le logo est dessiné en bleu foncé : en thème sombre on le pose sur une
+   pastille blanche plutôt que de le laisser disparaître. */
+:host-context([data-theme="sombre"]) .logo {
+  background: #fff; border-radius: .75rem; padding: .5rem .75rem;
+}
+
+.banniere h1 {
+  font-size: clamp(2rem, 1.2rem + 3vw, 3.4rem); line-height: 1.05;
+  letter-spacing: -.02em; margin: 0;
+  background: var(--degrade-marque);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.accroche {
+  color: var(--texte-doux); font-size: clamp(1rem, .95rem + .3vw, 1.15rem);
+  max-width: 34rem; margin: .85rem 0 1.75rem;
+}
+.actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+
+/* Lever les objections avant qu'elles ne se posent, en une ligne discrète. */
+/* `display: block` et non `flex` : en flex, l'icône se retrouvait seule et
+   centrée sur sa propre ligne dès que le texte passait à la ligne — ce qui
+   arrive systématiquement sur mobile. Un pictogramme en ligne suit son texte. */
+.rassurance {
+  margin: 1.1rem 0 0; font-size: .82rem; color: var(--texte-doux); line-height: 1.5;
+}
+.rassurance i { color: var(--pastille-turquoise-texte); margin-right: .35rem; }
+
+/* ── Carte de démonstration ─────────────────────────────────────────────────
+   Légèrement inclinée et surélevée : elle se lit comme une illustration, pas
+   comme un élément de l'interface avec lequel on pourrait interagir. */
+.demonstration-visuelle {
+  display: grid; justify-items: center;
+  animation: apparition 500ms 120ms cubic-bezier(.2, .8, .3, 1) backwards;
+}
+.apercu-seance {
+  width: min(100%, 23rem); padding: 1.25rem 1.35rem;
+  box-shadow: var(--ombre-3); transform: rotate(-1.2deg);
+}
+.apercu-seance header {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+}
+.marque-exemple {
+  font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--texte-doux); border: 1px dashed var(--bordure);
+  border-radius: 999px; padding: .15rem .5rem;
+}
+.quand { margin: .85rem 0 1rem; font-size: .84rem; color: var(--texte-doux); }
+/* Quatre mesures : 2×2 plutôt qu'une rangée de quatre, qui écraserait chaque
+   colonne à moins de 5rem dans une carte de 23rem et couperait « Vitesse ». */
+.mesures { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem 1rem; margin: 0; }
+.mesures dt {
+  font-size: .62rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--texte-doux);
+}
+.mesures dd {
+  margin: .2rem 0 0; font-size: 1.15rem; font-weight: 700;
+  letter-spacing: -.01em; font-variant-numeric: tabular-nums;
+}
+.mesures small { font-size: .72rem; font-weight: 600; color: var(--texte-doux); }
+
+.meteo-exemple {
+  margin-top: 1.15rem; padding: .75rem .9rem; border-radius: .65rem;
+  background: color-mix(in srgb, var(--azur) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--azur) 22%, transparent);
+}
+.titre-meteo {
+  display: block; font-size: .62rem; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--texte-doux);
+}
+.meteo-exemple ul {
+  list-style: none; margin: .45rem 0 .35rem; padding: 0;
+  display: flex; gap: 1rem; flex-wrap: wrap;
+  font-size: .92rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.origine { font-size: .68rem; color: var(--texte-doux); }
+
+/* ── Bandeau de chiffres ────────────────────────────────────────────────────
+   Une surface pleine plutôt que des nombres flottants : elle sépare la
+   promesse du détail et donne à la page un premier temps de respiration. */
+.bande-chiffres {
+  padding: clamp(1.25rem, 3vw, 1.75rem) clamp(1rem, 3vw, 2rem);
+  border-radius: var(--rayon-large);
+  background: var(--surface); border: 1px solid var(--bordure);
+  box-shadow: var(--ombre-1);
+}
+.chiffres {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1rem;
+  text-align: center;
+}
+/* Filets de séparation entre colonnes, jamais avant la première. */
+.chiffres li { display: grid; gap: .15rem; padding: 0 .5rem; }
+.chiffres li + li { border-left: 1px solid var(--bordure); }
+@media (max-width: 46rem) { .chiffres li + li { border-left: 0; } }
+.chiffres strong {
+  font-size: clamp(1.7rem, 1.2rem + 1.4vw, 2.3rem); font-weight: 700;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  background: var(--degrade-marque);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.chiffres span { font-size: .8rem; color: var(--texte-doux); }
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+section + section, .pied { margin-top: clamp(2.5rem, 6vw, 4rem); }
+h2 { text-align: center; font-size: clamp(1.2rem, 1rem + .8vw, 1.6rem); }
+.sous-titre {
+  text-align: center; color: var(--texte-doux); max-width: 40rem;
+  margin: .25rem auto 1.5rem; font-size: .95rem;
+}
+
+.grille, .grille-sources { display: grid; gap: 1rem; margin-top: 1.25rem; }
+
+/*
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ Pourquoi DEUX colonnes en dur, et non `auto-fit` comme ailleurs         │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * `auto-fit` répartit au mieux la LARGEUR, sans rien savoir du NOMBRE d'items.
+ * Avec quatre atouts et un minimum de 16rem, la page tombait sur trois
+ * colonnes : trois cartes alignées, puis une quatrième seule sur sa ligne, au
+ * tiers de la largeur, avec un trou à sa droite. Le lecteur y voit une
+ * hiérarchie qui n'existe pas — les quatre atouts sont des pairs.
+ *
+ * Un diviseur de quatre est donc imposé : 2×2 dès qu'il y a la place, 1×4
+ * sinon. Aucune largeur de fenêtre ne peut plus produire d'orpheline.
+ *
+ * Les sources, elles, sont trois et gardent `auto-fit` : trois colonnes ou
+ * une seule, les deux répartitions sont pleines.
+ */
+.grille { grid-template-columns: repeat(2, 1fr); }
+.grille-sources { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+
+.atout, .source { padding: 1.35rem; transition: transform var(--transition),
+                                               box-shadow var(--transition); }
+/* Un léger relief au survol : la carte se signale comme un bloc de contenu
+   sans jamais prétendre être cliquable — aucun curseur ne change. */
+.atout:hover, .source:hover { transform: translateY(-2px); box-shadow: var(--ombre-2); }
+.atout h3, .source h3 { margin: .6rem 0 .35rem; font-size: 1rem; }
+.atout p, .source p { margin: 0; color: var(--texte-doux); font-size: .9rem; }
+
+/*
+ * Carte d'atout en objet média : pictogramme à gauche, texte à droite. Sur deux
+ * colonnes la carte est large ; empiler l'icône au-dessus du titre y laissait
+ * une bande vide et allongeait la carte sans rien apporter. Le titre revient
+ * ainsi en haut à gauche, là où commence la lecture.
+ */
+.atout {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 1rem;
+  align-content: start;
+}
+.atout .pictogramme { grid-row: 1 / span 2; align-self: start; }
+.atout h3 { margin: .15rem 0 .35rem; align-self: center; }
+
+.pictogramme {
+  display: grid; place-items: center; width: 2.6rem; height: 2.6rem;
+  border-radius: .8rem; background: var(--degrade-marque); color: #fff; font-size: 1.1rem;
+}
+
+.liste-types {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center;
+}
+
+.demonstration { padding: clamp(1.25rem, 3vw, 1.75rem); text-align: center; }
+.demonstration > p { color: var(--texte-doux); margin: .25rem 0 1.25rem; font-size: .92rem; }
+.demonstration dl {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem; margin: 0 0 1.5rem;
+}
+.demonstration dt {
+  font-size: .68rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--texte-doux);
+}
+.demonstration dd { margin: .3rem 0 0; }
+.demonstration code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem;
+  padding: .15rem .4rem; border-radius: .35rem; background: var(--surface-douce);
+}
+
+/* ── Pied de page ─────────────────────────────────────────────────────────── */
+.pied {
+  padding-top: clamp(1.5rem, 4vw, 2rem); border-top: 1px solid var(--bordure);
+  display: grid; gap: 1rem; justify-items: center; text-align: center;
+}
+.pile-resume h3 {
+  margin: 0 0 .75rem; font-size: .7rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--texte-doux);
+}
+.jetons {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center;
+}
+.jetons li {
+  padding: .26rem .6rem; border-radius: 999px; font-size: .76rem; font-weight: 600;
+  background: var(--pastille-azur-fond); color: var(--pastille-azur-texte);
+}
+.pied .mention { margin: 0; font-size: .82rem; color: var(--texte-doux); }
+
+/* ── Repli en une colonne ───────────────────────────────────────────────────
+   62rem : en dessous, la carte de démonstration passerait sous les 18rem, où
+   ses trois mesures se replient et où elle cesse d'illustrer quoi que ce soit. */
+@media (max-width: 62rem) {
+  .banniere { grid-template-columns: 1fr; text-align: center; }
+  .logo, .accroche { margin-inline: auto; }
+  .actions, .rassurance { justify-content: center; }
+  /* La démonstration passe SOUS l'argument : on vient lire une promesse
+     avant de regarder une vignette. */
+  .demonstration-visuelle { order: 2; }
+  .apercu-seance { transform: none; text-align: left; }
+  .grille { grid-template-columns: 1fr; }
+}

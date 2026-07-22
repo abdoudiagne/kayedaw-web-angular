@@ -1,5 +1,5 @@
 import { FormControl } from '@angular/forms';
-import { emailValide, motDePasseNonTrivial, robustesseMotDePasse } from './auth.validators';
+import { emailValide, robustesseMotDePasse } from './auth.validators';
 
 describe('Validateurs d authentification', () => {
 
@@ -26,20 +26,6 @@ describe('Validateurs d authentification', () => {
 
     it('laisse passer le vide (rôle de Validators.required)', () => {
       expect(emailValide(new FormControl(''))).toBeNull();
-    });
-  });
-
-  describe('motDePasseNonTrivial', () => {
-
-    it('refuse les mots de passe de tête de dictionnaire', () => {
-      expect(motDePasseNonTrivial(new FormControl('motdepasse'))).toEqual({ motDePasseTropCourant: true });
-      expect(motDePasseNonTrivial(new FormControl('12345678'))).toEqual({ motDePasseTropCourant: true });
-      // La casse ne doit pas suffire à contourner le contrôle
-      expect(motDePasseNonTrivial(new FormControl('MotDePasse'))).toEqual({ motDePasseTropCourant: true });
-    });
-
-    it('accepte un mot de passe quelconque', () => {
-      expect(motDePasseNonTrivial(new FormControl('coureur-du-59'))).toBeNull();
     });
   });
 

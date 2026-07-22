@@ -44,21 +44,3 @@ export function robustesseMotDePasse(valeur: string): number {
   return Math.round(Math.min(score, 100));
 }
 
-/**
- * Refuse les mots de passe les plus courants.
- *
- * Une longueur minimale seule laisse passer « 12345678 » ou « motdepasse » :
- * ce sont les premiers essais de toute attaque par dictionnaire.
- */
-const TROP_COURANTS = [
-  'motdepasse', 'password', '12345678', '123456789', 'azertyui', 'qwertyui',
-  'abcdefgh', 'iloveyou', 'sunshine', 'princess', 'football', 'motdepasse1'
-];
-
-export const motDePasseNonTrivial: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
-  const valeur = (control.value as string | null)?.toLowerCase();
-  if (!valeur) {
-    return null;
-  }
-  return TROP_COURANTS.includes(valeur) ? { motDePasseTropCourant: true } : null;
-};

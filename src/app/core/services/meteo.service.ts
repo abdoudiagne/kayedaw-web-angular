@@ -22,11 +22,17 @@ export class MeteoService {
    * On envoie l'HEURE et pas seulement le jour : c'est tout l'intérêt de
    * l'aperçu pour planifier — 7 h et 18 h n'ont ni la même température ni
    * le même vent, et c'est justement ce qui fait choisir un créneau.
+   *
+   * `pays` lève l'homonymie : « Dakar » désigne la capitale du Sénégal pour un
+   * compte sénégalais, et rien pour un compte français — plutôt qu'un homonyme
+   * syrien pris au hasard du classement du géocodeur.
    */
-  conditions(ville: string, dateHeure: string): Observable<ConditionsMeteo | null> {
+  conditions(ville: string, dateHeure: string, pays?: string): Observable<ConditionsMeteo | null> {
     const params = new HttpParams().set('ville', ville).set('dateHeure', dateHeure);
 
-    return this.http.get<ConditionsMeteo | null>('/api/meteo/conditions', { params })
+    return this.http.get<ConditionsMeteo | null>('/api/meteo/conditions', {
+      params: pays ? params.set('pays', pays) : params
+    })
       .pipe(catchError(() => of(null)));
   }
 }

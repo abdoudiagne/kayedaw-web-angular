@@ -1,0 +1,141 @@
+<h1>Statistiques</h1>
+<p class="silence">Ce que racontent vos sorties sur la période choisie.</p>
+
+<div class="periode carte">
+  <!-- Raccourcis : deux dates à saisir à la main à chaque consultation
+       était le principal frein à l'usage de cet écran. -->
+  <!-- p-selectbutton : un groupe de boutons EXCLUSIF, avec navigation
+       clavier et état sélectionné annoncés par la bibliothèque. -->
+  <p-selectbutton [options]="optionsPeriode" optionLabel="libelle" optionValue="jours"
+                  [ngModel]="joursActifs()" (onChange)="appliquerPeriode($event.value)"
+                  [allowEmpty]="false" ariaLabelledBy="periodes-predefinies" />
+  <span id="periodes-predefinies" class="sr-only">Périodes prédéfinies</span>
+  <div class="dates">
+    <label class="etiquette" for="debut">Du</label>
+    <input pInputText id="debut" type="date" [formControl]="debut" />
+    <label class="etiquette" for="fin">au</label>
+    <input pInputText id="fin" type="date" [formControl]="fin" />
+  </div>
+  <!-- Bornes inversées : l'API renvoyait un jeu vide, indiscernable d'une
+       période réellement sans séance. On nomme la cause plutôt que de
+       laisser l'utilisateur conclure qu'il n'a rien couru. -->
+  @if (periodeInvalide()) {
+    <p class="erreur-periode" role="alert">
+      La date de fin précède la date de début : les statistiques affichées
+      sont celles de la dernière période valide.
+    </p>
+  }
+</div>
+
+@if (stats(); as s) {
+  <dl class="indicateurs">
+    <div class="tuile">
+      <dt>Séances</dt><dd>{{ s.nombreSeances }}</dd>
+      @if (s.comparaison; as c) {
+        <p class="ecart">{{ c.nombreSeances }} sur la période précédente</p>
+      }
+    </div>
+    <div class="tuile">
+      <dt>Distance totale</dt><dd>{{ s.distanceTotaleKm }} <small>km</small></dd>
+      <!-- On teste explicitement le null : un @if sur la valeur seule
+           masquait une variation de 0 %, qui est pourtant une information. -->
+      @if (s.comparaison?.variationDistancePourcent !== null
+           && s.comparaison?.variationDistancePourcent !== undefined) {
+        <!-- Un chiffre seul ne dit rien : la variation lui donne un sens -->
+        <p class="ecart" [class.hausse]="variationPourcent() > 0" [class.baisse]="variationPourcent() < 0">
+          {{ variationPourcent() > 0 ? '▲' : variationPourcent() < 0 ? '▼' : '=' }}
+          {{ absolu(variationPourcent()) }} % vs période précédente
+        </p>
+      }
+    </div>
+    <div class="tuile"><dt>Temps total</dt><dd>{{ s.dureeTotaleMinutes | duree }}</dd></div>
+    <div class="tuile"><dt>Allure moyenne</dt><dd>{{ s.allureMoyenneMinParKm | allure }}</dd></div>
+  </dl>
+
+  @if (courbe(); as c) {
+    <section>
+      <h2>Évolution hebdomadaire</h2>
+      <!--
+        Graphique en SVG pur : aucune dépendance ajoutée pour une courbe
+        aussi simple. Une bibliothèque coûterait plus lourd que l'écran.
+      -->
+      <figure class="graphique">
+        <!--
+          PAS de preserveAspectRatio="none" : il étirait le repère
+          horizontalement, ce qui APLATISSAIT la pente sur écran large et
+          la redressait sur mobile — la courbe racontait une progression
+          différente selon la fenêtre, alors même que l'axe part de zéro
+          pour garantir l'inverse. Les points r=3 y devenaient des ovales.
+          Le rapport est désormais tenu en CSS par aspect-ratio.
+        -->
+        <svg [attr.viewBox]="'0 0 ' + c.largeur + ' ' + c.hauteur" role="img"
+             [attr.aria-label]="'Volume hebdomadaire, de ' + c.min + ' à ' + c.max + ' km'">
+          <defs>
+            <linearGradient id="remplissage" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--azur)" stop-opacity=".28" />
+              <stop offset="100%" stop-color="var(--azur)" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <!-- Ligne de base à zéro : matérialise l'origine de l'échelle -->
+          <line x1="0" [attr.y1]="c.hauteur - 12" [attr.x2]="c.largeur" [attr.y2]="c.hauteur - 12"
+                stroke="var(--bordure)" stroke-width="1" vector-effect="non-scaling-stroke" />
+          <path [attr.d]="c.aire" fill="url(#remplissage)" />
+          <path [attr.d]="c.ligne" fill="none" stroke="var(--azur)" stroke-width="2"
+                stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+          @for (point of c.points; track point.x) {
+            <circle [attr.cx]="point.x" [attr.cy]="point.y" r="3" fill="var(--marine)" />
+          }
+        </svg>
+        <figcaption class="legende">
+          @for (etiquette of c.etiquettes; track etiquette) { <span>{{ etiquette }}</span> }
+        </figcaption>
+        <!-- L'échelle en clair : une courbe sans graduation n'est pas une donnée -->
+        <p class="echelle">Échelle 0 → {{ c.plafond }} km par semaine</p>
+      </figure>
+    </section>
+  }
+
+  @if (records(); as r) {
+    <section>
+      <h2>Records personnels</h2>
+      <p class="silence rappel">Calculés sur l'ensemble de vos séances réalisées.</p>
+      <dl class="records">
+        <div><dt>Plus longue sortie</dt><dd>{{ r.plusLongueDistanceKm ?? '—' }} <small>km</small></dd></div>
+        <div><dt>Plus longue durée</dt>
+          <dd>@if (r.plusLongueDuree !== null) { {{ r.plusLongueDuree | duree }} } @else { — }</dd></div>
+        <div><dt>Meilleure allure</dt>
+          <dd>@if (r.meilleureAllureMinParKm !== null) { {{ r.meilleureAllureMinParKm | allure }} } @else { — }</dd></div>
+        <div><dt>Plus grosse semaine</dt><dd>{{ r.plusGrosseSemaineKm ?? '—' }} <small>km</small></dd></div>
+        <div><dt>Séances au total</dt><dd>{{ r.nombreTotalSeances }}</dd></div>
+        <div><dt>Distance cumulée</dt><dd>{{ r.distanceCumuleeKm }} <small>km</small></dd></div>
+      </dl>
+    </section>
+  }
+
+  @if (repartition().length > 0) {
+    <section>
+      <h2>Répartition par type</h2>
+      <!-- Barres en CSS pur : pas de dépendance graphique pour si peu -->
+      <ul class="repartition">
+        @for (ligne of repartition(); track ligne.type) {
+          <li>
+            <span class="libelle">{{ libelleType(ligne.type) }}</span>
+            <span class="barre">
+              <span [style.width.%]="ligne.pourcentage" [attr.data-type]="ligne.type"></span>
+            </span>
+            <!-- La barre porte une PROPORTION, la colonne un VOLUME :
+                 sans le pourcentage écrit, la longueur restait la seule
+                 manière de lire la part de chaque type. -->
+            <span class="valeur">{{ ligne.km }} km <small>{{ ligne.pourcentage }} %</small></span>
+          </li>
+        }
+      </ul>
+    </section>
+  } @else {
+    <p class="vide">Aucune séance sur cette période.</p>
+  }
+} @else {
+  <dl class="indicateurs" aria-busy="true">
+    @for (tuile of squelettes; track tuile) { <p-skeleton height="6.2rem" /> }
+  </dl>
+}

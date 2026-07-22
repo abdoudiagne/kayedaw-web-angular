@@ -23,7 +23,7 @@ describe('SeanceService', () => {
   const seance: Seance = {
     id: 1, type: 'ENDURANCE', distanceKm: 10, dureeMinutes: 50,
     dateHeure: '2026-07-19T18:30', estPlanifiee: false, commentaire: null, allureMinParKm: 5, vitesseKmH: 12,
-    intensite: 'modérée', ville: null, temperatureMaxC: null, temperatureMinC: null,
+    intensite: 'modérée', ville: null, pays: null, temperatureMaxC: null, temperatureMinC: null,
     temperatureALHeureC: null, precipitationMm: null, ventKmH: null, pm25: null,
     sourceMeteo: null, stationMeteo: null, alertesMeteo: []
   };

@@ -1,0 +1,150 @@
+:host { --ecart-blocs: 1.5rem; }
+
+.entete { display: flex; align-items: center; gap: 1rem; padding: 1.25rem;
+          margin: 1.5rem 0 var(--ecart-blocs); }
+.avatar { display: grid; place-items: center; width: 3.25rem; height: 3.25rem;
+          border-radius: 50%; background: var(--degrade-marque); color: #fff;
+          font-weight: 700; box-shadow: var(--ombre-2); }
+.identite { display: grid; margin-right: auto; }
+.identite strong { font-size: 1.1rem; }
+/* Couleurs dans .etiquette-role (styles.css), partagées avec /administration */
+
+.chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+            gap: 1rem; margin: 0 0 var(--ecart-blocs); }
+.tuile { position: relative; overflow: hidden; padding: 1.15rem 1.25rem;
+         border-radius: var(--rayon); background: var(--surface);
+         border: 1px solid var(--bordure); box-shadow: var(--ombre-1); }
+.tuile::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+                 background: var(--degrade-marque); }
+dt { font-size: .8rem; color: var(--texte-doux); }
+dd { margin: .3rem 0 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em;
+     font-variant-numeric: tabular-nums; }
+/* La capitale ne concerne QUE le mois, rendu en minuscules par DatePipe.
+   Portée à tous les dd, elle transformait le repli « aucune séance » en
+   « Aucune Séance » — une phrase ordinaire écrite comme un titre. */
+/* Voir seance-detail : première lettre seulement, pas chaque mot. */
+dd.mois::first-letter { text-transform: uppercase; }
+dd .sans-capitale { text-transform: none; font-size: 1rem; font-weight: 600; }
+dd small { font-size: .9rem; color: var(--texte-doux); }
+
+/*
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ Un seul rythme vertical pour toute la page                             │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * L'écart entre deux cartes valait 1.25rem à l'intérieur du duo mais ZÉRO
+ * entre le duo et la carte des préférences — `.duo` n'avait pas de marge
+ * basse et `.duo .bloc` remettait la sienne à 0. Les deux blocs se touchaient
+ * presque, et rien ne disait plus où finissait l'un.
+ *
+ * `--ecart-blocs` fixe la valeur une fois ; toutes les règles la citent.
+ */
+.bloc { padding: clamp(1.25rem, 3vw, 1.75rem); margin-bottom: var(--ecart-blocs);
+        max-width: 34rem; }
+/* La carte des préférences occupe toute la largeur, comme le duo au-dessus :
+   à 44rem elle paraissait tronquée à côté de lui. */
+.bloc.large { max-width: none; }
+/* Deux colonnes internes : les valeurs par défaut à gauche, l'affichage à
+   droite. Le seuil de 30rem par colonne est celui en dessous duquel la
+   grille des types (libellé + deux champs) devient illisible. */
+.colonnes-preferences { display: grid; gap: 1rem 2.5rem;
+                        grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+                        align-items: start; }
+.bloc h2 { margin: 0 0 .75rem; }
+.bloc h3 { margin: 1.5rem 0 .35rem; font-size: .82rem; font-weight: 700;
+           letter-spacing: .06em; text-transform: uppercase; color: var(--texte-doux); }
+.bloc h3:first-of-type { margin-top: .75rem; }
+
+/* Grille à trois colonnes plutôt qu'un <table> : il n'y a pas de données
+   tabulaires à lire ici, seulement des champs alignés. Les intitulés de
+   colonne sont donc décoratifs, et chaque champ porte son propre
+   aria-label — sans quoi un lecteur d'écran annoncerait dix champs
+   « nombre » sans dire à quel type ils appartiennent. */
+.grille-defauts { display: grid; grid-template-columns: 1fr 7rem 7rem;
+                  gap: .5rem .75rem; align-items: center; margin-top: .5rem; }
+.entete-colonne { font-size: .68rem; font-weight: 700; letter-spacing: .04em;
+                  text-transform: uppercase; color: var(--texte-doux); }
+.type-ligne { font-size: .92rem; font-weight: 550; }
+/* Les contrôles PrimeNG portent une largeur minimale intrinsèque : dans une
+   grille à colonnes étroites, ils la débordent au lieu de se comprimer.
+   min-width: 0 lève cette contrainte — sans lui, /profil débordait de
+   76 px sur un écran de 390 px, mesuré par le test @mobile. */
+.grille-defauts p-inputnumber { width: 100%; min-width: 0; }
+:host ::ng-deep .grille-defauts .p-inputnumber { width: 100%; min-width: 0; }
+:host ::ng-deep .grille-defauts .p-inputnumber-input { width: 100%; min-width: 0;
+                                                      padding: .5rem .6rem; }
+
+.ligne-reglages { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+                  margin-top: .5rem; }
+.ligne-reglages .champ { max-width: 16rem; }
+.aide.haut { margin: 0 0 .25rem; }
+
+/* Deux colonnes pour les cartes courtes du compte, une seule dès qu'il n'y
+   a plus la place — un formulaire à 20 rem de large devient inconfortable. */
+.duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+       gap: var(--ecart-blocs); align-items: start;
+       /* La marge basse manquante : sans elle, la carte suivante venait se
+          coller au duo, l'écart vertical valant zéro là où l'horizontal
+          valait 1.25rem. */
+       margin-bottom: var(--ecart-blocs); }
+.duo .bloc { max-width: none; margin-bottom: 0; }
+
+/* ── Vignettes de thème ─────────────────────────────────────────────── */
+.themes { display: flex; flex-wrap: wrap; gap: .75rem; border: 0; padding: 0;
+          margin: .5rem 0 0; }
+.choix-theme { display: grid; gap: .4rem; justify-items: center; cursor: pointer;
+               padding: .5rem; border-radius: var(--rayon);
+               border: 1px solid var(--bordure); background: var(--surface);
+               transition: border-color var(--transition), box-shadow var(--transition); }
+.choix-theme:hover { border-color: var(--azur); }
+.choix-theme.actif { border-color: var(--azur); box-shadow: 0 0 0 3px rgba(43, 123, 191, .18); }
+/* Le focus clavier se voit sur la vignette, l'input étant en sr-only */
+.choix-theme:focus-within { outline: 2px solid var(--azur); outline-offset: 2px; }
+.libelle-theme { font-size: .78rem; font-weight: 600; }
+
+/*
+  L'aperçu montre les couleurs de l'AUTRE thème : il ne peut donc pas
+  utiliser les jetons courants, qui suivent le thème actif. Ces valeurs
+  sont figées à dessein — elles représentent une palette, pas l'état.
+*/
+.apercu { display: grid; align-content: start; gap: .25rem; width: 4.5rem; height: 3rem;
+          padding: .35rem; border-radius: .4rem; overflow: hidden;
+          border: 1px solid var(--bordure); }
+.apercu-entete { height: .5rem; border-radius: 2px; background: var(--degrade-marque); }
+.apercu-trait { height: .32rem; border-radius: 2px; }
+.apercu-trait.court { width: 60%; }
+.apercu[data-apercu="CLAIR"] { background: #f4f7fb; }
+.apercu[data-apercu="CLAIR"] .apercu-trait { background: #cbd6e6; }
+.apercu[data-apercu="SOMBRE"] { background: #071a2c; }
+.apercu[data-apercu="SOMBRE"] .apercu-trait { background: #2a4a68; }
+/* Automatique : les deux palettes coupées en diagonale */
+.apercu[data-apercu="SYSTEME"] {
+  background: linear-gradient(112deg, #f4f7fb 0 48%, #071a2c 48% 100%); }
+.apercu[data-apercu="SYSTEME"] .apercu-trait {
+  background: linear-gradient(112deg, #cbd6e6 0 48%, #2a4a68 48% 100%); }
+
+.etat-auto { margin: 1.25rem 0 0; font-size: .82rem; color: var(--texte-doux);
+             display: flex; align-items: center; gap: .4rem; min-height: 1.4rem; }
+.etat-auto .echec { color: var(--danger); }
+.rouet-mini { width: .8rem; height: .8rem; border-radius: 50%;
+              border: 2px solid var(--bordure); border-top-color: var(--azur);
+              animation: rotation-mini .7s linear infinite; }
+@keyframes rotation-mini { to { transform: rotate(1turn); } }
+.lien-reessayer { background: none; border: 0; color: var(--azur); font: inherit;
+                  text-decoration: underline; cursor: pointer; padding: .25rem; }
+
+@media (max-width: 34rem) {
+  .grille-defauts { grid-template-columns: 1fr 5.5rem 5.5rem; gap: .4rem .5rem; }
+  .ligne-reglages { grid-template-columns: 1fr; }
+}
+form { display: grid; gap: .3rem; }
+.bouton { justify-self: start; margin-top: 1.25rem; }
+.erreur { color: var(--danger); font-size: .85rem; margin: .2rem 0 0; }
+.erreur.globale { margin-top: 1rem; padding: .7rem .9rem; border-radius: .6rem;
+                  background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.aide { color: var(--texte-doux); font-size: .8rem; margin: .75rem 0 0; }
+.bloc-attente { height: 12rem; margin-top: 1.5rem; }
+dd.ville { font-size: 1.2rem; }
+
+/* Les deux actions du formulaire d'informations, sur une même ligne. */
+.actions-formulaire { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

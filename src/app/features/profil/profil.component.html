@@ -1,0 +1,280 @@
+<h1>Mon profil</h1>
+<p class="silence">Vos informations de compte et votre activité.</p>
+
+@if (profil(); as p) {
+  <section class="entete carte">
+    <!-- Initiales, nom et email : des données, pas de la langue. Voir la
+         note de TraductionService sur « CE » traduit en « THIS ». -->
+    <span class="avatar" translate="no">{{ auth.initiales() }}</span>
+    <div class="identite" translate="no">
+      <strong>{{ p.nom }}</strong>
+      <span class="silence">{{ p.email }}</span>
+    </div>
+    <p-tag [value]="libelleRole(p.role)"
+           [severity]="p.role === 'ADMIN' ? 'warn' : 'secondary'" />
+  </section>
+
+  <dl class="chiffres">
+    <div class="tuile"><dt>Séances réalisées</dt><dd>{{ p.nombreSeances }}</dd></div>
+    <div class="tuile"><dt>Distance cumulée</dt><dd>{{ p.distanceTotaleKm }} <small>km</small></dd></div>
+    <div class="tuile">
+      <dt>Ville de référence</dt>
+      <dd class="ville">{{ p.villeParDefaut }} <small>{{ p.pays }}</small></dd>
+    </div>
+    <div class="tuile">
+      <dt>Depuis</dt>
+      <dd class="mois">
+        @if (p.premiereSeance) { {{ p.premiereSeance | date:'MMMM y' }} }
+        @else { <span class="silence sans-capitale">aucune séance</span> }
+      </dd>
+    </div>
+  </dl>
+
+  <!--
+    Informations et Mot de passe CÔTE À CÔTE : deux formulaires courts,
+    indépendants, qui tenaient chacun sur une demi-largeur. Les empiler
+    allongeait la page sans rien apprendre de plus.
+  -->
+  <div class="duo">
+  <section class="carte bloc">
+    <h2>Informations</h2>
+    <form [formGroup]="formulaireNom" (ngSubmit)="enregistrerProfil()">
+      <label class="etiquette requis" for="nom">Nom</label>
+      <input pInputText id="nom" aria-required="true" type="text" formControlName="nom" autocomplete="name" />
+      @if (formulaireNom.controls.nom.invalid && formulaireNom.controls.nom.touched) {
+        <p class="erreur">Le nom est obligatoire.</p>
+      }
+
+      <!-- ┌─────────────────────────────────────────────────────────────┐
+           │ LE PAYS AVANT LA VILLE : c'est lui qui borne les suggestions │
+           └─────────────────────────────────────────────────────────────┘
+
+           Liste FERMÉE : le pays doit appartenir au référentiel qui sert au
+           géocodage, sinon aucune ville ne serait trouvable. -->
+      <label class="etiquette requis" for="pays">Pays</label>
+      <p-select inputId="pays" [options]="pays()" optionLabel="nom" optionValue="nom"
+                formControlName="pays" [filter]="true" filterBy="nom"
+                filterPlaceholder="Rechercher un pays" styleClass="pleine-largeur"
+                (onChange)="changerPays()" ariaLabel="Pays" />
+      <p class="aide">Il détermine les villes proposées ci-dessous.</p>
+
+      <!-- La ville était une saisie libre : une faute de frappe passait sans
+           broncher et se payait plus tard, chaque séance pré-remplie avec elle
+           revenant sans météo. L'autocomplétion la contraint au référentiel. -->
+      <label class="etiquette requis" for="ville">Ville de référence</label>
+      <p-autocomplete inputId="ville" formControlName="villeParDefaut"
+                      [suggestions]="suggestionsVilles()" optionLabel="nom"
+                      placeholder="Lille" [forceSelection]="false" [required]="true"
+                      (completeMethod)="rechercherVille($event.query)"
+                      (onSelect)="choisirVille($event.value)"
+                      styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'">
+        <ng-template #item let-suggestion>
+          <span>{{ suggestion.nom }}</span>
+          @if (suggestion.departement) {
+            <span class="departement">{{ suggestion.departement }}</span>
+          }
+        </ng-template>
+      </p-autocomplete>
+      @if (formulaireNom.controls.villeParDefaut.invalid
+           && formulaireNom.controls.villeParDefaut.touched) {
+        <p class="erreur">La ville est obligatoire.</p>
+      }
+      <p class="aide">
+        Elle pré-remplit vos nouvelles séances et permet d'afficher la météo
+        prévue dès que vous choisissez une date, avant même d'enregistrer.
+      </p>
+
+      <!--
+        « Annuler » n'apparaît QUE si quelque chose a été modifié : proposer
+        d'annuler un formulaire intact n'annulerait rien, et un bouton qui ne
+        fait rien apprend au lecteur à ignorer les boutons.
+
+        Il rétablit les valeurs du serveur — pas un formulaire vide : on annule
+        ses modifications, on ne se déconnecte pas de son propre nom.
+      -->
+      <div class="actions-formulaire">
+        <p-button type="submit" [label]="nomEnCours() ? 'Enregistrement…' : 'Enregistrer'"
+                  [loading]="nomEnCours()" [disabled]="nomEnCours() || formulaireNom.pristine" />
+        @if (formulaireNom.dirty && !nomEnCours()) {
+          <p-button type="button" label="Annuler" severity="secondary" [text]="true"
+                    (onClick)="annulerProfil()" />
+        }
+      </div>
+    </form>
+  </section>
+
+  <section class="carte bloc">
+    <h2>Mot de passe</h2>
+    <form [formGroup]="formulaireMdp" (ngSubmit)="changerMotDePasse()">
+      <label class="etiquette requis" for="actuel">Mot de passe actuel</label>
+      <p-password inputId="actuel" formControlName="motDePasseActuel" [feedback]="false"
+                  [toggleMask]="true" autocomplete="current-password"
+                  styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'" />
+
+      <label class="etiquette requis" for="nouveau">Nouveau mot de passe</label>
+      <p-password inputId="nouveau" formControlName="nouveauMotDePasse" [toggleMask]="true"
+                  autocomplete="new-password" styleClass="pleine-largeur"
+                  [inputStyleClass]="'pleine-largeur'" />
+      @if (formulaireMdp.controls.nouveauMotDePasse.hasError('minlength')
+           && formulaireMdp.controls.nouveauMotDePasse.touched) {
+        <p class="erreur">5 caractères minimum.</p>
+      }
+
+      <p class="aide">
+        Le mot de passe actuel est exigé : sans lui, un jeton volé permettrait
+        de vous verrouiller hors de votre propre compte.
+      </p>
+
+      <p-button type="submit" [label]="mdpEnCours() ? 'Changement…' : 'Changer le mot de passe'"
+                [loading]="mdpEnCours()" [disabled]="mdpEnCours()" />
+
+      @if (erreurMdp(); as message) {
+        <p class="erreur globale" role="alert">{{ message }}</p>
+      }
+    </form>
+  </section>
+  </div>
+
+  <!--
+    PRÉFÉRENCES — enregistrement AUTOMATIQUE, sans bouton.
+    Contrairement au nom et au mot de passe, qui sont des soumissions
+    explicites vers leurs propres endpoints, ce sont des réglages qu'on
+    ajuste en regardant le résultat. Un bouton à penser à cliquer produit
+    surtout des réglages qu'on croit avoir posés.
+  -->
+  <section class="carte bloc large">
+    <h2>Préférences</h2>
+
+    <!--
+      ⚠️ La condition porte sur un SIGNAL, et non sur la longueur du
+      FormArray formulairePreferences.controls.seances.
+
+      Un FormArray est un objet ordinaire : le remplir depuis une réponse
+      HTTP ne marque PAS un composant OnPush comme à revérifier. L'écran ne
+      se redessinait donc que grâce au profil.set() de l'autre requête —
+      et uniquement si celle-ci arrivait APRÈS. Sous charge, l'ordre
+      s'inversait et le squelette restait indéfiniment à l'écran.
+      Le signal est écrit APRÈS le remplissage : il est à la fois l'état
+      affiché et le déclencheur du rendu.
+    -->
+    @switch (etatPreferences()) {
+      @case ('chargement') {
+        <p-skeleton height="12rem" />
+      }
+      @case ('erreur') {
+        <p class="erreur" role="alert">
+          Préférences indisponibles pour le moment.
+          <button type="button" class="lien-reessayer" (click)="chargerPreferences()">
+            Réessayer
+          </button>
+        </p>
+      }
+      @case ('pret') {
+      <!-- Pas de <form> avec (ngSubmit) : il n'y a plus rien à soumettre,
+           chaque modification part d'elle-même. -->
+      <div [formGroup]="formulairePreferences">
+
+        <div class="colonnes-preferences">
+        <div>
+        <h3>Valeurs par défaut des séances</h3>
+        <p class="aide haut">
+          Pré-remplissent le formulaire quand vous choisissez un type.
+          Elles restent modifiables à chaque séance.
+        </p>
+
+        <div class="grille-defauts" formArrayName="seances">
+          <span class="entete-colonne">Type</span>
+          <span class="entete-colonne">Distance (km)</span>
+          <span class="entete-colonne">Durée (min)</span>
+
+          @for (ligne of formulairePreferences.controls.seances.controls;
+                track ligne.controls.type.value; let i = $index) {
+            <ng-container [formGroupName]="i">
+              <label class="type-ligne" [attr.for]="'distance-' + i">
+                {{ libelleType(ligne.controls.type.value) }}
+              </label>
+              <p-inputnumber [inputId]="'distance-' + i" formControlName="distanceKm"
+                             mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="2"
+                             [min]="0.1" [max]="200" styleClass="pleine-largeur"
+                             [inputStyleClass]="'pleine-largeur'"
+                             [ariaLabel]="'Distance par défaut, ' + libelleType(ligne.controls.type.value)" />
+              <p-inputnumber [inputId]="'duree-' + i" formControlName="dureeMinutes" [min]="1"
+                             styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'"
+                             [ariaLabel]="'Durée par défaut, ' + libelleType(ligne.controls.type.value)" />
+            </ng-container>
+          }
+        </div>
+        @if (formulairePreferences.controls.seances.invalid
+             && formulairePreferences.controls.seances.dirty) {
+          <p class="erreur">
+            Chaque distance doit valoir entre 0,1 et 200 km, chaque durée au moins 1 minute.
+          </p>
+        }
+
+        </div>
+
+        <div>
+        <h3>Thème</h3>
+        <!--
+          Des VIGNETTES et non une liste déroulante : le thème est un choix
+          visuel, on doit voir ce qu'on choisit avant de choisir. Chaque
+          aperçu est un fragment d'interface aux couleurs du thème visé —
+          « Automatique » montre les deux, coupés en diagonale.
+
+          Sous le capot ce sont de vrais boutons radio : navigation aux
+          flèches, annonce du groupe, et un seul choix possible — gratuit
+          avec le natif, à réécrire entièrement avec des <div>.
+        -->
+        <fieldset class="themes">
+          <legend class="sr-only">Thème d'affichage</legend>
+          @for (option of themes; track option.valeur) {
+            <label class="choix-theme"
+                   [class.actif]="formulairePreferences.controls.theme.value === option.valeur">
+              <input type="radio" class="sr-only" formControlName="theme"
+                     [value]="option.valeur" />
+              <span class="apercu" [attr.data-apercu]="option.valeur" aria-hidden="true">
+                <span class="apercu-entete"></span>
+                <span class="apercu-trait"></span>
+                <span class="apercu-trait court"></span>
+              </span>
+              <span class="libelle-theme">{{ option.libelle }}</span>
+            </label>
+          }
+        </fieldset>
+
+        <h3>Langue</h3>
+        <div class="ligne-reglages">
+          <div>
+            <label class="etiquette sr-only" for="langue">Langue</label>
+            <p-select inputId="langue" [options]="optionsLangue" optionLabel="libelle"
+                      optionValue="valeur" formControlName="langue"
+                      styleClass="pleine-largeur" ariaLabel="Langue" />
+          </div>
+        </div>
+        <p class="aide">
+          La traduction anglaise passe par le widget Google Translate : elle
+          se charge à la demande, n'est pas disponible hors ligne, et
+          <strong>recharge la page</strong> au changement.
+        </p>
+        </div>
+        </div>
+
+        <!-- État de l'enregistrement automatique, en role="status" et non
+             en alert : c'est une confirmation, elle ne doit pas
+             interrompre la frappe en cours. -->
+        <p class="etat-auto" role="status">
+          @switch (etatEnregistrement()) {
+            @case ('encours') { <span class="rouet-mini" aria-hidden="true"></span> Enregistrement… }
+            @case ('ok') { <span aria-hidden="true">✓</span> Enregistré }
+            @case ('erreur') { <span class="echec">Enregistrement impossible — réessayez.</span> }
+            @default { <span class="silence">Chaque modification est enregistrée automatiquement.</span> }
+          }
+        </p>
+      </div>
+      }
+    }
+  </section>
+
+} @else {
+  <p-skeleton height="12rem" styleClass="mt-3" />
+}

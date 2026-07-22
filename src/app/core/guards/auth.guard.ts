@@ -30,10 +30,20 @@ export const authGuard: CanActivateFn = (route, state) => {
   });
 };
 
-/** Empêche un utilisateur déjà connecté de revenir sur l'écran de connexion. */
+/**
+ * Empêche un utilisateur déjà connecté de revenir sur les écrans réservés aux
+ * visiteurs — accueil public, connexion, inscription.
+ *
+ * ⚠️ La cible dépend du RÔLE. Le garde renvoyait tout le monde vers /seances :
+ * un administrateur qui rouvrait la page de connexion atterrissait sur un
+ * carnet vide, alors que son écran est /administration.
+ */
 export const invitéGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  return auth.estConnecte() ? router.createUrlTree(['/seances']) : true;
+  if (!auth.estConnecte()) {
+    return true;
+  }
+  return router.createUrlTree([auth.estAdmin() ? '/administration' : '/seances']);
 };

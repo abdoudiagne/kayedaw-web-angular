@@ -34,11 +34,16 @@ test.describe('Statistiques', () => {
     const debut = page.getByLabel('Du');
     const avant = await debut.inputValue();
 
-    await page.getByRole('button', { name: '7 jours' }).click();
+    const raccourci7 = page.getByRole('button', { name: '7 jours' });
+    await raccourci7.click();
     await expect(debut).not.toHaveValue(avant);
 
-    // Le raccourci actif doit être signalé, sinon on ne sait plus ce qu'on regarde
-    await expect(page.getByRole('button', { name: '7 jours' })).toHaveClass(/actif/);
+    /*
+     * L'état sélectionné se lit sur `aria-pressed` et non plus sur une classe
+     * CSS maison : p-selectbutton l'expose nativement, ce qui rend l'assertion
+     * SÉMANTIQUE — un lecteur d'écran voit exactement ce que le test vérifie.
+     */
+    await expect(raccourci7).toHaveAttribute('aria-pressed', 'true');
   });
 
   /**

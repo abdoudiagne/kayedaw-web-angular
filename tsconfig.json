@@ -19,6 +19,8 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "ES2022",
+    // ⚠️ Retiré par la migration Angular 21, remis ici : sans "dom", tout accès
+    // à document / localStorage / matchMedia cesse de compiler.
     "lib": ["ES2022", "dom"]
   },
   "angularCompilerOptions": {

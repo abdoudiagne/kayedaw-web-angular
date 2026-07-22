@@ -1,0 +1,48 @@
+/*
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ Une seule carte, donc CENTRÉE                                          │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * Cette règle était une grille à deux colonnes (`1.05fr .95fr`) : à gauche
+ * l'argumentaire, à droite le formulaire. L'argumentaire est parti sur la page
+ * d'accueil, et la grille est restée — avec un seul enfant, la carte se calait
+ * dans la première colonne, poussée à gauche et étirée sur la moitié de la
+ * largeur, face à un vide.
+ *
+ * Sont partis avec elle `.presentation`, `.logo`, `h1`, `.accroche` et
+ * `.atouts` : plus aucun élément de ce gabarit ne les portait. Du style mort
+ * est pire qu'un commentaire périmé — on le recopie en croyant qu'il sert.
+ *
+ * `align-content: center` et non `align-items` : c'est la PISTE entière qu'on
+ * centre dans la hauteur, pas le contenu dans sa rangée.
+ */
+.accueil {
+  display: grid; justify-items: center; align-content: center;
+  min-height: 60vh; padding: clamp(1rem, 4vw, 3rem) 0;
+}
+
+/* La largeur est bornée : un formulaire de deux champs étalé sur 1200 px
+   oblige l'œil à traverser l'écran entre l'étiquette et son champ. */
+.formulaire { width: min(100%, 27rem); padding: clamp(1.5rem, 3vw, 2.25rem);
+              box-shadow: var(--ombre-3);
+              animation: apparition 500ms 80ms cubic-bezier(.2, .8, .3, 1) backwards; }
+.titre-carte { margin: 0; font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
+.sous-titre { margin: .15rem 0 1.25rem; font-size: .92rem; }
+form { display: grid; gap: .3rem; }
+
+.erreur { color: var(--danger); font-size: .85rem; margin: .15rem 0 0; }
+.erreur.globale { margin-top: 1rem; padding: .7rem .9rem; border-radius: .6rem;
+                  background: color-mix(in srgb, var(--danger) 10%, transparent); }
+/* PrimeNG dimensionne ses composants sur leur contenu : on impose la
+   pleine largeur là où l'écran l'exige, via une classe passée en
+   styleClass plutôt qu'en ciblant les classes internes .p-*. */
+/* `.pleine-largeur` est désormais un utilitaire GLOBAL (styles.scss) : la
+   définition locale, sous `:host ::ng-deep`, ne servait que cet écran alors
+   que cinq autres gabarits posaient la même classe sans effet. */
+.bascule { display: grid; gap: .5rem; justify-items: center; margin-top: 1.5rem;
+           padding-top: 1.25rem; border-top: 1px solid var(--bordure); font-size: .9rem; }
+
+.avertissement { margin: .3rem 0 0; font-size: .82rem; color: var(--alerte); }
+
+/* Plus de requête média : une colonne unique et centrée se comporte déjà
+   correctement à toutes les largeurs, la carte étant bornée par `min()`. */

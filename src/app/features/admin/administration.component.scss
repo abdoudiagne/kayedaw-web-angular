@@ -1,0 +1,162 @@
+.titre { display: flex; align-items: flex-end; justify-content: space-between;
+         gap: 1rem; flex-wrap: wrap; }
+.sous-titre { margin: .25rem 0 0; font-size: .88rem; color: var(--texte-doux); }
+
+.indicateurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+               gap: 1rem; margin: 1.75rem 0; }
+.indicateurs > div {
+  position: relative; overflow: hidden;
+  padding: 1.15rem 1.25rem; border-radius: var(--rayon);
+  background: var(--surface); border: 1px solid var(--bordure); box-shadow: var(--ombre-1);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.indicateurs > div:hover { transform: translateY(-3px); box-shadow: var(--ombre-2); }
+.indicateurs > div::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+                             background: var(--degrade-marque); }
+dt { font-size: .8rem; color: var(--texte-doux); }
+dt small { display: block; font-size: .72rem; opacity: .8; }
+dd { margin: .3rem 0 0; font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em;
+     font-variant-numeric: tabular-nums; }
+
+/* La barre n'existe qu'avec une sélection : elle POUSSE le tableau vers le
+   bas au lieu de le recouvrir, pour ne masquer aucune ligne cochée. */
+.edition { display: grid; gap: .3rem; }
+.edition .cible { margin: 0 0 .5rem; font-size: .85rem; }
+.separation { margin: 1.5rem 0; border: 0; border-top: 1px solid var(--bordure); }
+
+.barre-selection { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+                   margin-bottom: .75rem; padding: .6rem .9rem; border-radius: var(--rayon);
+                   background: var(--pastille-orange-fond);
+                   color: var(--pastille-orange-texte); font-size: .88rem;
+                   font-weight: 600; animation: apparition 180ms ease-out; }
+
+.filtres { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.filtres .etiquette { margin: 0; white-space: nowrap; }
+/* Une recherche qui sert à filtrer un tableau pleine largeur ne peut pas
+   tenir en douze caractères : la classe qui portait cette largeur a disparu
+   avec la bascule PrimeNG, et le champ était resté à sa taille par défaut. */
+.champ-recherche { width: min(100%, 26rem); }
+:host ::ng-deep .champ-recherche .p-inputtext { width: 100%; }
+
+table { width: 100%; border-collapse: collapse; background: var(--surface);
+        border: 1px solid var(--bordure); border-radius: var(--rayon);
+        overflow: hidden; box-shadow: var(--ombre-1); }
+th, td { text-align: left; padding: .75rem 1rem; border-bottom: 1px solid var(--bordure); }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr { transition: background var(--transition); }
+tbody tr:hover { background: var(--surface-douce); }
+tbody tr.soi-meme { background: color-mix(in srgb, var(--azur) 5%, transparent); }
+th { font-size: .78rem; color: var(--texte-doux); text-transform: uppercase;
+     letter-spacing: .04em; background: var(--surface-douce); }
+.email { color: var(--texte-doux); font-size: .9rem; }
+.actions { text-align: right; white-space: nowrap; }
+/* 2,75 rem = 44 px, le minimum recommandé pour une cible tactile.
+   À .2rem de rembourrage, ces trois actions — dont une DESTRUCTIVE —
+   formaient des cibles de 24 px collées les unes aux autres. */
+.lien { display: inline-flex; align-items: center; min-height: 2.75rem;
+        background: none; border: 0; padding: .2rem .6rem; margin-left: .1rem;
+        color: var(--azur); font: inherit; font-size: .85rem; cursor: pointer;
+        border-radius: .35rem; transition: background var(--transition); }
+.lien:hover { background: var(--surface-douce); text-decoration: underline; }
+.lien.danger { color: var(--danger); }
+
+/* Pastilles de rôle et de type : .etiquette-role / .etiquette-type dans
+   styles.css. Cet écran n'en déclarait aucune pour les types de séance,
+   d'où un badge gris uniforme là où la liste en montrait quatre couleurs. */
+
+.consultation { margin: 1.5rem 0; padding: 1.25rem; }
+.entete-consultation { display: flex; align-items: center; justify-content: space-between; }
+.entete-consultation h2 { margin: 0; }
+.seances { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .4rem; }
+.seances li { display: flex; align-items: center; gap: 1rem; font-size: .9rem;
+              padding: .5rem 0; border-bottom: 1px solid var(--bordure); }
+.planifiee { font-size: .68rem; font-weight: 700; text-transform: uppercase;
+             color: var(--azur); }
+
+.routes { list-style: none; padding: 0; display: grid; gap: .65rem; }
+.routes li { display: grid; grid-template-columns: minmax(9rem, 20rem) 1fr 4rem;
+             align-items: center; gap: 1rem; }
+.chemin { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.barre { height: .9rem; background: var(--surface-douce); border: 1px solid var(--bordure);
+         border-radius: 999px; overflow: hidden; }
+.barre > span { display: block; height: 100%; border-radius: 999px;
+                background: var(--degrade-marque);
+                animation: deploiement 620ms cubic-bezier(.2, .8, .3, 1); }
+@keyframes deploiement { from { width: 0 !important; } }
+.valeur { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vide { color: var(--texte-doux); padding: 1.5rem 0; }
+.pagination { display: flex; align-items: center; gap: 1rem; justify-content: center;
+              margin-top: 1.25rem; }
+
+@media (max-width: 46rem) {
+  /*
+     Un tableau à quatre colonnes ne rentre pas sur un téléphone : il
+     débordait de 136 px, mesuré par le test Playwright. Plutôt que de
+     réduire la police jusqu'à l'illisible ou d'imposer un défilement
+     horizontal, chaque ligne devient une CARTE.
+
+     L'en-tête disparaît, donc chaque cellule doit porter son intitulé —
+     d'où l'attribut data-intitule repris ici en ::before.
+  */
+  table, thead, tbody, tr, td { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table { border: 0; box-shadow: none; background: none; }
+  tbody tr { margin-bottom: .75rem; padding: .35rem .25rem; border-radius: var(--rayon);
+             background: var(--surface); border: 1px solid var(--bordure);
+             box-shadow: var(--ombre-1); }
+  td { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+       padding: .5rem .85rem; border-bottom: 0; }
+  td[data-intitule]::before {
+    content: attr(data-intitule);
+    font-size: .68rem; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--texte-doux);
+  }
+  .email { word-break: break-all; text-align: right; }
+  .actions { justify-content: flex-start; flex-wrap: wrap; gap: .25rem;
+             border-top: 1px solid var(--bordure); margin-top: .25rem; }
+  .lien { margin-left: 0; }
+
+  .routes li { grid-template-columns: 1fr 3.5rem; }
+  .barre { grid-column: 1 / -1; }
+  .chemin { word-break: break-all; white-space: normal; }
+  .filtres { flex-wrap: wrap; }
+  .filtres .champ { max-width: 100%; }
+}
+
+/* ── Corrections d'alignement ───────────────────────────────────────────────
+   Les deux actions du titre forment un groupe : enfants directs du conteneur
+   en `space-between`, elles se retrouvaient dispersées sur la barre. */
+.actions-titre { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+
+/* ⚠️ Les valeurs des tuiles doivent partager la même ligne de base.
+   « Administrateurs » porte un `<small>sur cette page</small>` : son intitulé
+   tient sur deux lignes, ce qui poussait SON chiffre plus bas que les trois
+   autres. `space-between` cale les valeurs en bas, quelle que soit la hauteur
+   du libellé. */
+.indicateurs > div { display: grid; align-content: space-between; }
+
+/* La bande vide au-dessus du tableau : `#caption` ne contient qu'un titre pour
+   lecteurs d'écran, mais PrimeNG lui réserve un bandeau complet. On annule le
+   rembourrage — `sr-only` masque par découpe, pas par `display: none`, donc le
+   texte reste dans l'arbre d'accessibilité. */
+:host ::ng-deep .p-datatable-header { padding: 0; border: 0; background: transparent; }
+
+/* Section repliable : le marqueur natif est remplacé par un chevron aligné. */
+/* Le bloc repliable touchait le bas du tableau : sans respiration, son titre
+   se lisait comme une dernière ligne de la table. */
+.repliable { margin-top: 2rem; border-top: 1px solid var(--bordure); padding-top: 1rem; }
+.repliable > summary {
+  display: flex; align-items: center; gap: .5rem; cursor: pointer;
+  list-style: none; border-radius: var(--rayon); padding: .25rem;
+}
+.repliable > summary::-webkit-details-marker { display: none; }
+.repliable > summary h2 { margin: 0; }
+.repliable > summary::after {
+  content: '\2039'; margin-left: auto; font-size: 1.4rem; line-height: 1;
+  color: var(--texte-doux); transform: rotate(-90deg);
+  transition: transform var(--transition);
+}
+.repliable[open] > summary::after { transform: rotate(90deg); }
+.repliable > summary:hover { background: var(--surface-douce); }
+.repliable > summary:focus-visible { outline: 2px solid var(--azur); outline-offset: 2px; }

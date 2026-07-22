@@ -1,0 +1,146 @@
+.titre { display: flex; align-items: flex-end; justify-content: space-between;
+         gap: 1rem; flex-wrap: wrap; }
+.titre .silence { margin: 0; font-size: .95rem; }
+
+.resume { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+          gap: 1rem; margin: 1.5rem 0; }
+.resume > div { position: relative; overflow: hidden; padding: 1rem 1.15rem;
+                border-radius: var(--rayon); background: var(--surface);
+                border: 1px solid var(--bordure); box-shadow: var(--ombre-1); }
+.resume dt { font-size: .78rem; color: var(--texte-doux); }
+.resume dd { margin: .25rem 0 0; font-size: 1.5rem; font-weight: 700;
+             letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.resume dd small { font-size: .85rem; font-weight: 600; color: var(--texte-doux); }
+.jauge { height: 4px; margin-top: .6rem; border-radius: 2px; background: var(--bordure);
+         overflow: hidden; }
+.jauge > span { display: block; height: 100%; background: var(--degrade-marque);
+                transition: width var(--transition); }
+/* Au-delà de 80 % du plafond, la couleur alerte sans bloquer */
+.jauge > span.proche { background: var(--degrade-accent); }
+
+.filtres { display: flex; align-items: flex-end; gap: .75rem; flex-wrap: wrap;
+           margin: 1.5rem 0 1.25rem; padding: 1rem 1.15rem; background: var(--surface);
+           border: 1px solid var(--bordure); border-radius: var(--rayon); }
+.filtres .etiquette { margin: 0 0 .25rem; display: block; white-space: nowrap; }
+.filtres > div { display: grid; }
+.filtres .large { flex: 1; min-width: 12rem; }
+.filtres .champ { width: auto; }
+.filtres .large .champ { width: 100%; }
+.lien-reinit { align-self: flex-end; background: none; border: 0; color: var(--azur);
+               font: inherit; font-size: .85rem; cursor: pointer; padding: .5rem .2rem;
+               text-decoration: underline; }
+
+.section-liste { display: flex; align-items: center; gap: .6rem; margin: 1.75rem 0 .75rem;
+                 font-size: .95rem; }
+.compteur { padding: .1rem .5rem; border-radius: 999px; font-size: .72rem; font-weight: 700;
+            background: rgba(43, 123, 191, .12); color: var(--azur); }
+.seance.planifiee { border-left: 3px solid var(--azur); }
+
+/* Séance en cours : liseré orange et point pulsé. L'animation ne porte
+   AUCUNE information seule — le titre de section, le compteur et le texte
+   en sr-only la disent aussi — elle ne fait qu'attirer l'œil, et
+   prefers-reduced-motion la neutralise globalement. */
+.seance.active { position: relative; border-left: 3px solid var(--orange);
+                 background: color-mix(in srgb, var(--orange) 4%, var(--surface)); }
+.pastille-active { position: absolute; top: .8rem; left: -.45rem;
+                   width: .55rem; height: .55rem; border-radius: 50%;
+                   background: var(--orange); box-shadow: 0 0 0 0 rgba(240, 126, 43, .55);
+                   animation: pulsation-active 2s ease-out infinite; }
+@keyframes pulsation-active {
+  70% { box-shadow: 0 0 0 .6rem rgba(240, 126, 43, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(240, 126, 43, 0); }
+}
+.compteur.vif { background: var(--pastille-orange-fond); color: var(--pastille-orange-texte); }
+
+.meteo-ligne { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center;
+               margin: .55rem 0 0; font-size: .82rem; color: var(--texte-doux); }
+.meteo-ligne .ville { font-weight: 600; color: var(--texte); }
+/* Le pays est un complément, pas l'information principale : il suit la ville
+   sans lui disputer le regard. Le séparateur est décoratif, donc en ::before
+   — un lecteur d'écran n'a rien à faire d'un point médian. */
+.meteo-ligne .pays { color: var(--texte-doux); }
+.meteo-ligne .pays::before { content: '·'; margin: 0 .35rem; color: var(--bordure); }
+.meteo-ligne .prevision { padding: .1rem .45rem; border-radius: 999px; font-size: .68rem;
+                          font-weight: 700; text-transform: uppercase;
+                          background: var(--pastille-orange-fond);
+                          color: var(--pastille-orange-texte); }
+
+/* Atténuation, pas disparition : remplacer la liste par des squelettes à
+   chaque frappe la ferait clignoter. Le pointeur est neutralisé pour
+   éviter d'ouvrir une séance sur le point d'être remplacée. */
+.resultats.en-attente { opacity: .5; pointer-events: none;
+                        transition: opacity var(--transition); }
+.alerte-periode { margin: 0 0 1rem; padding: .7rem .9rem; border-radius: .6rem;
+                  font-size: .88rem; color: var(--danger);
+                  background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+.liste { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; }
+.seance {
+  background: var(--surface); border: 1px solid var(--bordure);
+  border-radius: var(--rayon); padding: .85rem 1.1rem;
+  box-shadow: var(--ombre-1);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  animation: apparition 380ms cubic-bezier(.2, .8, .3, 1) backwards;
+}
+.seance:hover { transform: translateY(-2px); box-shadow: var(--ombre-2); border-color: #c9dbef; }
+.seance:hover .chevron { transform: translateX(3px); color: var(--azur); }
+.seance a { display: grid; grid-template-columns: 8.5rem 7.5rem repeat(4, minmax(4.6rem, auto)) 1fr auto;
+            gap: 1rem; align-items: center; text-decoration: none; color: inherit; }
+
+/* Badge coloré par type : repère visuel immédiat dans une longue liste.
+   Les couleurs viennent de .etiquette-type (styles.css), commune aux trois
+   écrans qui affichent un type ; il ne reste ici que le calage en grille. */
+.etiquette-type { justify-self: start; }
+
+.date { color: var(--texte-doux); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.planifiee { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .04em;
+             text-transform: uppercase; color: var(--azur); }
+/* Chiffres à chasse fixe : les colonnes restent alignées d'une ligne à l'autre */
+.mesure { display: grid; gap: .1rem; font-variant-numeric: tabular-nums; }
+.intitule { font-size: .64rem; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: var(--texte-doux); }
+.mesure .valeur { font-size: .95rem; }
+.mesure strong { font-size: 1.05rem; }
+.allure { color: var(--texte-doux); }
+.chevron { font-size: 1.35rem; color: var(--bordure); transition: transform var(--transition), color var(--transition); }
+.alertes { color: var(--alerte); }
+
+.ligne { height: 3.6rem; }
+
+.pagination { display: flex; align-items: center; gap: 1rem; justify-content: center; margin-top: 1.75rem; }
+.pagination .bouton { padding: .5rem 1rem; }
+
+.vide { display: grid; justify-items: center; gap: .5rem; padding: 3.5rem 1rem;
+        text-align: center; background: var(--surface); border: 1px dashed var(--bordure);
+        border-radius: var(--rayon-large); }
+.vide img { opacity: .55; }
+.vide h2 { margin: .5rem 0 0; }
+.vide .bouton { margin-top: 1rem; }
+
+/* Entre 62 et 48rem, quatre mesures ne tiennent plus confortablement :
+   la vitesse, la plus redondante avec l'allure, s'efface en premier. */
+@media (max-width: 62rem) and (min-width: 48.01rem) {
+  .seance a { grid-template-columns: 8rem 7rem repeat(3, minmax(4.6rem, auto)) 1fr auto; }
+  .m-vitesse { display: none; }
+}
+
+@media (max-width: 48rem) {
+  /* En dessous de 48rem, la grille en colonnes devient illisible :
+     on repasse en flux libre plutôt que de rétrécir le texte. */
+  .seance a { grid-template-columns: 1fr auto; gap: .5rem 1rem; }
+  .seance .date { grid-column: 2; text-align: right; }
+  /* Les mesures passent sur deux rangées, étiquettes comprises :
+     display:inline-block les aurait aplaties et masqué les intitulés.
+
+     ⚠️ Classes explicites et NON :nth-of-type : les frères sont tous des
+     <span>, donc :nth-of-type(1) désignait span.type et ces règles ne
+     s'appliquaient à aucune mesure. */
+  .m-distance { grid-column: 1 / 2; grid-row: 3; }
+  .m-duree { grid-column: 2 / 3; grid-row: 3; text-align: right; }
+  .m-allure { grid-column: 1 / 2; grid-row: 4; }
+  .m-vitesse { grid-column: 2 / 3; grid-row: 4; text-align: right; }
+  .chevron { display: none; }
+}
+
+/* Les deux actions du titre : export à gauche, création à droite. */
+.actions-titre { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }

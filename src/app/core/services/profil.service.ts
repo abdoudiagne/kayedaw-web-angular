@@ -13,8 +13,8 @@ export class ProfilService {
     return this.http.get<Profil>(this.base);
   }
 
-  modifierProfil(nom: string, villeParDefaut: string): Observable<Profil> {
-    return this.http.put<Profil>(this.base, { nom, villeParDefaut });
+  modifierProfil(nom: string, villeParDefaut: string, pays: string): Observable<Profil> {
+    return this.http.put<Profil>(this.base, { nom, villeParDefaut, pays });
   }
 
   /**

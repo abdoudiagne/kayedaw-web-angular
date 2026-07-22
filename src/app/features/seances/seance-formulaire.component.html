@@ -1,0 +1,353 @@
+<a routerLink="/seances" class="fil">‹ Mes séances</a>
+<h1>{{ estModification() ? 'Modifier la séance' : 'Nouvelle séance' }}</h1>
+<p class="silence">Distance et durée suffisent — allure et intensité sont calculées.</p>
+
+<!--
+  ┌───────────────────────────────────────────────────────────────────────────┐
+  │ L'APERÇU MÉTÉO PASSE À DROITE, ET IL Y RESTE                              │
+  └───────────────────────────────────────────────────────────────────────────┘
+
+  Il vivait au MILIEU du formulaire, entre la date et le commentaire. Or c'est
+  précisément en déplaçant la date ou l'heure qu'on veut le voir bouger : sur un
+  écran d'ordinateur il tombait sous la ligne de flottaison, et il fallait
+  défiler pour constater l'effet de sa propre saisie — puis remonter pour la
+  corriger. Un retour en direct qu'on ne voit pas n'est pas un retour en direct.
+
+  En colonne, il est COLLANT (`position: sticky`) : la date reste sous les yeux
+  en même temps que ses conséquences.
+
+  Il sort donc du <form> — il n'affiche que de la lecture, aucun champ — ce qui
+  permet aux deux blocs d'être frères dans la grille. En dessous de 62 rem la
+  colonne repasse sous le formulaire : à cette largeur, deux colonnes rendraient
+  les deux illisibles.
+-->
+<div class="plan" [class.sans-meteo]="estModification()">
+<form [formGroup]="formulaire" (ngSubmit)="soumettre()" class="formulaire carte">
+  <div class="ligne">
+    <div>
+      <label class="etiquette requis" for="type">Type</label>
+      <p-select inputId="type" [options]="optionsType" optionLabel="libelle"
+                optionValue="valeur" formControlName="type" styleClass="pleine-largeur"
+                ariaLabel="Type" />
+    </div>
+
+    <div>
+      <label class="etiquette requis" for="dateHeure">Date et heure</label>
+      <!-- type datetime-local : le navigateur fournit jour + heure + minute -->
+      <!--
+        min / max bornent le SÉLECTEUR natif : le calendrier n'ouvre plus
+        sur un jour hors règle. Ils ne remplacent pas le validateur — un
+        attribut HTML ne crée pas de validation Angular — mais évitent
+        d'avoir à échouer pour apprendre la règle.
+
+        En MODIFICATION, la borne basse est retirée : une séance passée
+        porte par définition une date antérieure à aujourd'hui, et un min
+        l'aurait rendue impossible à re-choisir dans le calendrier.
+      -->
+      <!--
+        ⚠️ SEUL CHAMP QUI RESTE NATIF, et c'est un choix.
+
+        p-datepicker lie un objet Date, là où ce contrôle porte une CHAÎNE
+        ISO locale envoyée telle quelle à l'API. Basculer imposerait de
+        refaire la conversion de fuseau — celle que maintenantLocalISO()
+        documente et que deux tests protègent — de réécrire le validateur
+        d'horizon, la comparaison de l'aperçu météo et le corps de requête.
+        Beaucoup de risque sur de la logique métier éprouvée, pour un seul
+        champ. Il porte pInputText : l'apparence suit Aura, la donnée non.
+      -->
+      <input pInputText id="dateHeure" aria-required="true" type="datetime-local"
+             [attr.min]="estModification() ? null : dateMin" [attr.max]="dateMax"
+             formControlName="dateHeure" class="pleine-largeur" />
+      @if (formulaire.controls.dateHeure.hasError('dateTropLointaine')
+           && formulaire.controls.dateHeure.touched) {
+        <p class="erreur">On ne planifie pas au-delà de {{ horizonJours }} jours.</p>
+      }
+      @if (horsPorteePrevision()) {
+        <!-- Au-delà de la portée des prévisions, l'absence de météo est
+             NORMALE : sans ce mot, l'encart vide passe pour une panne. -->
+        <p class="aide hors-portee">
+          📅 Séance planifiée — aucune prévision météo au-delà de
+          {{ porteePrevisionJours }} jours, elle sera complétée plus tard.
+        </p>
+      } @else if (estPlanifiee()) {
+        <p class="aide planifiee">📅 Séance planifiée — la météo affichée sera une prévision.</p>
+      }
+    </div>
+  </div>
+
+  <div class="ligne">
+    <div>
+      <label class="etiquette requis" for="distanceKm">Distance (km)</label>
+      <p-inputnumber inputId="distanceKm" formControlName="distanceKm" mode="decimal"
+                     [minFractionDigits]="0" [maxFractionDigits]="2" [min]="0.1" [max]="200"
+                     placeholder="10" styleClass="pleine-largeur"
+                     [inputStyleClass]="'pleine-largeur'" />
+      @if (formulaire.controls.distanceKm.invalid && formulaire.controls.distanceKm.touched) {
+        <p class="erreur">Distance obligatoire et positive.</p>
+      }
+    </div>
+
+    <div>
+      <label class="etiquette requis" for="dureeMinutes">Durée (minutes)</label>
+      <p-inputnumber inputId="dureeMinutes" formControlName="dureeMinutes" [min]="1"
+                     placeholder="50" styleClass="pleine-largeur"
+                     [inputStyleClass]="'pleine-largeur'" />
+      @if (formulaire.controls.dureeMinutes.invalid && formulaire.controls.dureeMinutes.touched) {
+        <p class="erreur">Durée obligatoire, au moins 1 minute.</p>
+      }
+    </div>
+  </div>
+
+  <!--
+    Retour immédiat calculé par un signal dérivé.
+
+    On affiche l'ALLURE ET LA VITESSE côte à côte : l'allure est une durée
+    par kilomètre, donc plus elle est BASSE plus on est rapide — un sens de
+    lecture inversé qui induit régulièrement en erreur. La vitesse, elle,
+    suit l'intuition « plus c'est haut, mieux c'est ». Les deux ensemble
+    lèvent l'ambiguïté sans avoir à l'expliquer.
+  -->
+  @if (allureCalculee(); as allure) {
+    <div class="apercu">
+      <div class="estimation">
+        <span class="intitule">Allure estimée</span>
+        <strong>{{ allure | allure }}</strong>
+        <span class="repere">plus c'est bas, plus c'est rapide</span>
+      </div>
+      <div class="estimation">
+        <span class="intitule">Vitesse</span>
+        <strong>{{ vitesseCalculee() }} km/h</strong>
+        <span class="repere">plus c'est haut, plus c'est rapide</span>
+      </div>
+    </div>
+  }
+  @if (formulaire.hasError('allureIrrealiste')) {
+    <p class="erreur">Cette allure paraît irréaliste — vérifiez distance et durée.</p>
+  }
+
+  @if (!estModification()) {
+    <!--
+      ┌───────────────────────────────────────────────────────────────────┐
+      │ LE PAYS D'ABORD : c'est lui qui commande les villes proposées     │
+      └───────────────────────────────────────────────────────────────────┘
+
+      Il est porté par la SÉANCE et non par le compte — on ne court pas
+      toujours chez soi. Pré-rempli sur le pays du profil, donc le cas
+      courant ne demande aucune saisie.
+
+      Liste FERMÉE : le pays doit appartenir au référentiel qui sert au
+      géocodage, sinon aucune ville ne serait trouvable.
+    -->
+    <label class="etiquette requis" for="pays">Pays</label>
+    <p-select inputId="pays" [options]="optionsPays()" optionLabel="nom" optionValue="nom"
+              formControlName="pays" [filter]="true" filterBy="nom"
+              filterPlaceholder="Rechercher un pays" placeholder="Choisissez un pays"
+              (onChange)="changerPays()" styleClass="pleine-largeur" ariaLabel="Pays" />
+    @if (paysManquant() && formulaire.controls.pays.touched) {
+      <p class="erreur">Choisissez le pays : il détermine les villes proposées.</p>
+    }
+    <p class="aide">Il détermine les villes proposées ci-dessous.</p>
+
+    <!--
+      Ville et pays sont OBLIGATOIRES, seuls de leur espèce parmi les champs
+      qui pourraient sembler accessoires : la météo est résolue puis STOCKÉE à
+      l'enregistrement, et cet écran ne propose pas le lieu en modification.
+      Séance créée sans lieu = séance sans météo pour toujours. Une distance
+      fautive, elle, se corrige.
+    -->
+    <label class="etiquette requis" for="ville">Ville</label>
+    <!--
+      p-autoComplete remplace l'autocomplétion écrite à la main : motif
+      ARIA combobox, navigation aux flèches, fermeture par Échap et
+      fermeture au blur sont fournis. Le débounce reste côté flux RxJS,
+      qui pilote aussi l'aperçu météo.
+
+      ⚠️ LE CONTRÔLE PORTE TRANSITOIREMENT L'OBJET SUGGESTION.
+
+      À la sélection, `onOptionSelect` appelle `updateModel(option)` AVANT
+      d'émettre `onSelect`. Or `getOptionValue()` renvoie l'objet entier
+      quand il ne porte pas de `.value` : le contrôle reçoit donc
+      `{nom, departement, latitude, longitude}`, puis `choisir()` le
+      remplace par la chaîne. Le champ affiche « Thiès » dans les deux cas,
+      mais tout ce qui LIT le contrôle voit passer l'objet — d'où
+      `nomDeVille()` côté composant.
+
+      `optionValue="nom"` semble corriger cela et casse pire : PrimeNG
+      applique la même résolution à la CHAÎNE tapée au clavier, qui devient
+      alors `undefined`. Le champ se vidait à chaque frappe.
+    -->
+    <!--
+      `[required]` ne pose PAS de validation Angular ici — celle-ci vient de
+      `villeRequise` sur le contrôle. Il rend `aria-required="true"` sur
+      l'input interne, seul signal que reçoit une technologie d'assistance :
+      l'astérisque du label est un ::after purement visuel, par choix
+      documenté dans styles.scss.
+    -->
+    <p-autocomplete inputId="ville" formControlName="ville" [suggestions]="suggestionsVilles()"
+                    optionLabel="nom" placeholder="Lille"
+                    [forceSelection]="false" [required]="true"
+                    (completeMethod)="rechercherVille($event.query)"
+                    (onSelect)="choisir($event.value)"
+                    styleClass="pleine-largeur" [inputStyleClass]="'pleine-largeur'">
+      <ng-template #item let-suggestion>
+        <span>{{ suggestion.nom }}</span>
+        @if (suggestion.departement) {
+          <span class="departement">{{ suggestion.departement }}</span>
+        }
+      </ng-template>
+    </p-autocomplete>
+    @if (villeManquante() && formulaire.controls.ville.touched) {
+      <p class="erreur">Indiquez la ville : c'est elle qui va chercher la météo, et
+        elle ne pourra plus être ajoutée après l'enregistrement.</p>
+    }
+    <!--
+      LE CAS QUI PASSAIT EN SILENCE : une ville non vide, mais qui ne désigne
+      aucun lieu du pays choisi — « Dakar » avec le pays resté sur France.
+      Aucune suggestion n'apparaissait, la frappe libre était acceptée, et la
+      séance s'enregistrait sans météo pour toujours.
+
+      Le message nomme les DEUX termes du problème, ville et pays : dire
+      « ville introuvable » sans rappeler le pays laisserait chercher la faute
+      du mauvais côté.
+    -->
+    @if (villeInconnue()) {
+      <p class="erreur" role="alert">
+        « {{ formulaire.controls.ville.value }} » est introuvable en
+        {{ formulaire.controls.pays.value }}. Vérifiez le pays, ou choisissez une
+        ville dans la liste.
+      </p>
+    }
+    @if (villeEnVerification()) {
+      <p class="aide" role="status">Vérification de la ville…</p>
+    }
+    <!--
+      Le géocodeur cherche par RESSEMBLANCE, pas par préfixe : « bamb » lui
+      évoque Bamba ou Mbamb, jamais Bambilor, qui n'apparaît qu'à cinq lettres.
+      Une liste vide se lirait « cette ville n'existe pas » — on dit plutôt
+      quoi faire.
+    -->
+    @if (saisieTropCourte()) {
+      <p class="aide" role="status">
+        Aucune correspondance pour l'instant — continuez à saisir : les petites
+        communes n'apparaissent qu'à partir de cinq lettres.
+      </p>
+    }
+    <p class="aide">Pré-remplis avec votre lieu de référence. La météo suit la date choisie.</p>
+  }
+
+  <label class="etiquette" for="commentaire">Commentaire</label>
+  <textarea pTextarea id="commentaire" rows="3" formControlName="commentaire"
+            maxlength="500" class="pleine-largeur"></textarea>
+
+  <div class="actions">
+    <p-button type="submit" [label]="envoiEnCours() ? 'Enregistrement…' : 'Enregistrer'"
+              [loading]="envoiEnCours()" [disabled]="envoiEnCours() || lieuIncomplet()" />
+    <a pButton routerLink="/seances" severity="secondary" [text]="true">Annuler</a>
+
+    <!--
+      ⚠️ Un bouton désactivé ne prend pas le focus : un lecteur d'écran ne le
+      rencontre jamais en tabulant, et rien n'explique l'impasse. Le motif est
+      donc écrit à côté, dans une région `status` — annoncée poliment à son
+      apparition, sans interrompre la saisie en cours.
+
+      C'est aussi la raison pour laquelle SEUL LE LIEU désactive ce bouton.
+      Le désactiver sur l'invalidité complète du formulaire le rendrait muet
+      la plupart du temps ; les autres champs continuent de révéler leur
+      erreur à la soumission, ce que `soumettre()` fait déjà.
+    -->
+    @if (lieuIncomplet()) {
+      <p class="raison-inactif" role="status">
+        @if (villeEnVerification()) {
+          Vérification de la ville…
+        } @else if (villeInconnue()) {
+          Cette ville n'existe pas dans le pays choisi.
+        } @else {
+          Renseignez {{ paysManquant() ? 'le pays' : 'la ville' }} pour enregistrer.
+        }
+      </p>
+    }
+  </div>
+
+  <!--
+    Le 422 vient de la sealed interface côté Kotlin. On traduit chaque
+    motif en message métier explicite plutôt qu'en erreur technique.
+  -->
+  @if (refus(); as motif) {
+    <div class="refus" role="alert">
+      @switch (motif.motif) {
+        @case ('PLAFOND_HEBDOMADAIRE') {
+          <strong>Plafond hebdomadaire dépassé</strong>
+          <p>Cette séance porterait votre semaine à {{ motif.volumeCalculeKm }} km,
+             au-delà du plafond de {{ motif.plafondKm }} km.</p>
+        }
+        @case ('DATE_TROP_LOINTAINE') {
+          <strong>Planification trop lointaine</strong>
+          <p>{{ motif.detail }}</p>
+        }
+      }
+    </div>
+  }
+</form>
+
+  <!--
+    En MODIFICATION la colonne n'existe pas : l'écran n'y propose ni ville ni
+    pays, il n'y a donc aucune météo à prévisualiser et une colonne vide ne
+    ferait que rétrécir le formulaire.
+  -->
+  @if (!estModification()) {
+    <aside class="colonne-meteo">
+    <!--
+      APERÇU MÉTÉO EN DIRECT — avant tout enregistrement.
+      C'est ce qui rend la planification utile : on déplace la date ou l'heure
+      et l'on voit immédiatement les conditions, plutôt que de découvrir la
+      météo une fois la séance créée.
+    -->
+    @if (meteoApercu(); as meteo) {
+      <section class="apercu-meteo" aria-live="polite">
+        <header>
+          <strong>{{ meteo.ville }}</strong>
+          <span class="source" [class.prevision]="meteo.source === 'PREVISION_OPEN_METEO'">
+            {{ meteo.source === 'PREVISION_OPEN_METEO' ? 'prévision' : 'observé' }}
+          </span>
+          @if (meteo.station) { <span class="station">{{ meteo.station }}</span> }
+        </header>
+
+        <dl>
+          @if (meteo.temperatureALHeureC !== null) {
+            <div><dt>À l'heure prévue</dt>
+                 <dd><span aria-hidden="true">🌡️</span> {{ meteo.temperatureALHeureC }} °C</dd></div>
+          }
+          @if (meteo.temperatureMaxC !== null) {
+            <div><dt>Max du jour</dt>
+                 <dd><span aria-hidden="true">🔺</span> {{ meteo.temperatureMaxC }} °C</dd></div>
+          }
+          @if (meteo.temperatureMinC !== null) {
+            <div><dt>Min du jour</dt>
+                 <dd><span aria-hidden="true">🔻</span> {{ meteo.temperatureMinC }} °C</dd></div>
+          }
+          @if (meteo.ventMaxKmH !== null) {
+            <div><dt>Vent</dt>
+                 <dd><span aria-hidden="true">💨</span> {{ meteo.ventMaxKmH }} km/h</dd></div>
+          }
+          @if (meteo.precipitationMm !== null) {
+            <div><dt>Pluie</dt>
+                 <dd><span aria-hidden="true">🌧️</span> {{ meteo.precipitationMm }} mm</dd></div>
+          }
+        </dl>
+
+        @if (meteo.alertes.length > 0) {
+          <p class="alertes" role="alert">⚠ {{ meteo.alertes.join(' · ') }}</p>
+        }
+      </section>
+    } @else if (meteoEnCours()) {
+      <p-skeleton height="6rem" styleClass="apercu-attente" />
+    }
+      @if (!meteoApercu() && !meteoEnCours()) {
+        <!-- Un emplacement vide sans explication se lit comme une panne. -->
+        <p class="attente-meteo">
+          La météo s'affichera ici dès que le lieu et la date seront renseignés.
+        </p>
+      }
+    </aside>
+  }
+</div>

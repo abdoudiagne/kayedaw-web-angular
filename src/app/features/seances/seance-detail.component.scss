@@ -1,0 +1,71 @@
+.fil { display: inline-block; margin-bottom: .75rem; color: var(--texte-doux);
+       text-decoration: none; font-size: .9rem; transition: color var(--transition); }
+.fil:hover { color: var(--azur); }
+
+.titre { display: flex; align-items: flex-start; justify-content: space-between;
+         gap: 1rem; flex-wrap: wrap; }
+.titre h1 { margin-top: .35rem; }
+/* `capitalize` mettrait une majuscule à CHAQUE mot — « Mercredi 22 Juillet
+   2026 ». En français les noms de mois et de jours restent en minuscules :
+   seule l'initiale de la ligne se capitalise. Invisible en anglais, où la
+   locale les capitalise déjà. */
+.titre h1::first-letter { text-transform: uppercase; }
+/* Les couleurs de type viennent de .etiquette-type (styles.css) */
+.badge-planifiee { margin-left: .5rem; padding: .28rem .6rem; border-radius: 999px;
+                   font-size: .72rem; font-weight: 700;
+                   background: var(--pastille-azur-fond); color: var(--pastille-azur-texte); }
+.badge-active { margin-left: .5rem; padding: .28rem .6rem; border-radius: 999px;
+                font-size: .72rem; font-weight: 700;
+                background: var(--pastille-orange-fond); color: var(--pastille-orange-texte); }
+.intensite { padding: .35rem .75rem; border-radius: 999px; background: var(--surface);
+             border: 1px solid var(--bordure); color: var(--texte-doux); font-size: .85rem; }
+
+.mesures {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1px; margin: 1.5rem 0; padding: 0; overflow: hidden;
+  background: var(--bordure); border: 1px solid var(--bordure);
+  border-radius: var(--rayon-large); box-shadow: var(--ombre-1);
+}
+/* Les séparateurs sont l'arrière-plan de la grille : une seule ligne nette,
+   sans bordure double ni bord orphelin en fin de rangée. */
+.mesures > div { padding: 1.1rem 1.25rem; background: var(--surface); }
+dt { font-size: .8rem; color: var(--texte-doux); }
+/* Taille fixe et opacité légère : le pictogramme accompagne l'intitulé
+   sans lui voler la vedette ni décaler l'alignement des colonnes. */
+.pictogramme { font-size: .95rem; opacity: .85; margin-right: .15rem; }
+dd { margin: .25rem 0 0; font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em;
+     font-variant-numeric: tabular-nums; }
+dd small { font-size: .9rem; font-weight: 600; color: var(--texte-doux); }
+
+h2 { margin: 0 0 .5rem; font-size: 1rem; }
+.meteo, .commentaire { margin: 1.25rem 0; padding: 1.25rem; }
+.releve { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+          gap: 1rem 1.25rem; margin: 0; }
+/* Le dt porte l'intitulé, le dd la valeur : la relation est explicite
+   dans le DOM, pas seulement visuelle. */
+.releve dt { font-size: .7rem; font-weight: 700; letter-spacing: .04em;
+             text-transform: uppercase; color: var(--texte-doux); }
+.releve dd { margin: .2rem 0 0; font-size: 1.05rem; font-weight: 600;
+             font-variant-numeric: tabular-nums; }
+.releve .phare dd { font-size: 1.4rem; font-weight: 700; letter-spacing: -.02em; }
+/* La provenance est une métadonnée : discrète, mais toujours visible */
+.source { display: inline-block; margin-left: .5rem; padding: .18rem .5rem;
+          border-radius: 999px; font-size: .68rem; font-weight: 600;
+          letter-spacing: .02em; text-transform: none;
+          background: var(--pastille-turquoise-fond);
+          color: var(--pastille-turquoise-texte); }
+.source.prevision { background: var(--pastille-orange-fond);
+                    color: var(--pastille-orange-texte); }
+.commentaire p { margin: 0; color: var(--texte-doux); }
+.alertes { list-style: none; padding: 0; margin: .75rem 0 0; color: var(--alerte); font-size: .9rem; }
+
+.actions { display: flex; align-items: center; gap: .75rem; margin-top: 2rem; flex-wrap: wrap; }
+.danger { padding: .7rem 1.25rem; border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+          background: transparent; color: var(--danger); border-radius: .65rem;
+          cursor: pointer; font: inherit; font-weight: 600;
+          transition: background var(--transition), color var(--transition); }
+.danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.danger:disabled { opacity: .55; cursor: not-allowed; }
+
+.bloc-titre { height: 3.5rem; max-width: 22rem; margin-bottom: 1.5rem; }
+.bloc-mesures { height: 7rem; border-radius: var(--rayon-large); }

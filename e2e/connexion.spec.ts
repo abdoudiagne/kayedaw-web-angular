@@ -3,11 +3,22 @@ import { COMPTES } from './aide';
 
 test.describe('Connexion', () => {
 
-  test('la racine mène à la connexion quand on n est pas identifié', async ({ page }) => {
-    await page.goto('/');
-    await expect(page).toHaveURL(/\/connexion/);
-    await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible();
-  });
+  /**
+   * La racine ne mène PLUS à la connexion : elle présente l'application. Un
+   * visiteur devait auparavant saisir des identifiants avant même de savoir ce
+   * que fait le produit.
+   */
+  test('la racine présente l application, sans demander de se connecter',
+    async ({ page }) => {
+      await page.goto('/');
+
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByRole('heading', { name: 'Chaque foulée compte.' })).toBeVisible();
+      // Aucun champ de connexion : c'est une page de présentation
+      await expect(page.getByLabel('Mot de passe', { exact: true })).toHaveCount(0);
+      // Mais les deux portes d'entrée y sont
+      await expect(page.getByRole('link', { name: 'Créer un compte' }).first()).toBeVisible();
+    });
 
   test('un compte valide accède au carnet', async ({ page }) => {
     await page.goto('/connexion');
@@ -47,7 +58,11 @@ test.describe('Connexion', () => {
     await page.getByLabel('Mot de passe', { exact: true }).fill('mauvais-mot-de-passe');
     await page.getByRole('button', { name: 'Se connecter' }).click();
 
-    const message = page.getByRole('alert');
+    // On vise le message DU FORMULAIRE, pas « une alerte quelque part » :
+    // la pile de notifications occupe en permanence une région role="alert"
+    // vide — c'est le motif ARIA correct, une région live doit préexister au
+    // contenu qu'on y insère — donc le rôle seul est ambigu.
+    const message = page.locator('.erreur.globale');
     await expect(message).toBeVisible();
     // Le message ne doit distinguer ni l'email ni le mot de passe
     await expect(message).toHaveText(/Email ou mot de passe incorrect/);
@@ -86,19 +101,46 @@ test.describe('Connexion', () => {
     await expect(champ).toHaveAttribute('type', 'password');
 
     /*
-     * L'icône est un SVG décoratif (aria-hidden) : le nom accessible vient du
-     * texte en sr-only. On le cible donc par son RÔLE et son nom, pas par du
-     * texte visible — c'est aussi ce qui garantit qu'un lecteur d'écran et un
-     * pilotage vocal trouvent le bouton.
+     * ⚠️ RÉGRESSION D'ACCESSIBILITÉ ASSUMÉE, introduite par p-password.
+     *
+     * Le révélateur écrit à la main était un <button> portant un nom
+     * accessible en sr-only : atteignable au clavier, trouvable au pilotage
+     * vocal, testable par getByRole. PrimeNG rend une simple ICÔNE
+     * (.p-password-toggle-mask-icon), sans rôle ni nom, et hors de l'ordre de
+     * tabulation. Le test cible donc une classe interne — ce qu'on évite
+     * normalement — parce qu'il n'existe plus rien de sémantique à viser.
      */
-    const bascule = page.getByRole('button', { name: 'Afficher le mot de passe' });
-    await expect(bascule.locator('svg')).toBeVisible();
+    const bascule = page.locator('.p-password-toggle-mask-icon');
+    await expect(bascule).toBeVisible();
     await bascule.click();
 
     await expect(champ).toHaveAttribute('type', 'text');
-    // Le nom accessible s'inverse une fois le mot de passe révélé
-    await expect(page.getByRole('button', { name: 'Masquer le mot de passe' })).toBeVisible();
     // On doit toujours être sur la page : un bouton sans type aurait soumis
     await expect(page).toHaveURL(/\/connexion/);
+  });
+
+  test('un administrateur atterrit sur son écran, pas sur le carnet',
+    async ({ page }) => {
+      await page.goto('/connexion');
+      await page.getByLabel('Email').fill(COMPTES.admin.email);
+      await page.getByLabel('Mot de passe', { exact: true }).fill(COMPTES.admin.motDePasse);
+      await page.getByRole('button', { name: 'Se connecter' }).click();
+
+      await expect(page).toHaveURL(/\/administration/);
+    });
+
+  /**
+   * Le paramètre `redirige` PRIME sur l'écran d'accueil du rôle : y ramener
+   * l'utilisateur est tout l'objet du garde qui l'a posé.
+   */
+  test('le paramètre redirige l emporte sur l écran par défaut', async ({ page }) => {
+    await page.goto('/statistiques');            // le garde renvoie vers /connexion
+    await expect(page).toHaveURL(/redirige/);
+
+    await page.getByLabel('Email').fill(COMPTES.utilisateur.email);
+    await page.getByLabel('Mot de passe', { exact: true }).fill(COMPTES.utilisateur.motDePasse);
+    await page.getByRole('button', { name: 'Se connecter' }).click();
+
+    await expect(page).toHaveURL(/\/statistiques/);
   });
 });
