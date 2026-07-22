@@ -22,7 +22,7 @@ The app calls `/api/**`, which `proxy.conf.json` forwards to `http://localhost:8
 
 ⚠️ **Redémarrer le backend remet les comptes de démonstration à leur mot de passe d'origine** — la base est en mémoire. C'est le remède quand la suite e2e échoue en masse sur la connexion. Both repos are published under `github.com/abdoudiagne` (`kayedaw-api-kotlin`, `kayedaw-web-angular`), branch `main`.
 
-⚠️ Le dossier local et toute la documentation disent `kayedaw-api-kotlin`, mais le **remote git du backend pointe encore sur `kayedaw-api-koltin`** — l'ancienne faute de frappe. Le dépôt GitHub n'a pas été renommé : le faire, puis mettre l'URL locale à jour, sont deux gestes qui restent à poser. Ne pas « corriger » l'URL avant le renommage GitHub, les `push` casseraient.
+Le dépôt backend s'est longtemps appelé `kayedaw-api-**koltin**` — une faute de frappe, corrigée partout : dossier local, documentation, dépôt GitHub et URL du remote. GitHub conserve une redirection depuis l'ancien nom, donc un clone ancien continue de fonctionner.
 
 Demo accounts, seeded on every backend start by `config/DatasInitiales.kt` (H2 is in-memory, so they are recreated each run):
 
